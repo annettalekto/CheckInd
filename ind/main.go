@@ -33,7 +33,8 @@ func main() {
 	w.Resize(fyne.NewSize(800, 540))
 	// w.SetFixedSize(true)
 
-	menu := fyne.NewMainMenu(fyne.NewMenu("Файл"),
+	menu := fyne.NewMainMenu(
+		fyne.NewMenu("Файл"),
 		// fyne.NewMenuItem("Выход (Alt+F4)", func() { a.Quit() }),
 		// a quit item will be appended to our first menu
 		fyne.NewMenu("Опции",

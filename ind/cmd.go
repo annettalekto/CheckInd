@@ -7,7 +7,9 @@ import (
 	"strconv"
 	"strings"
 
+	// "go.bug.st/serial" // работает, но нет полного имени COM (Product)
 	"go.bug.st/serial"
+	"go.bug.st/serial/enumerator"
 )
 
 type COM struct {
@@ -18,20 +20,23 @@ type COM struct {
 func (com *COM) Open() (err error) {
 
 	// Retrieve the port list
-	ports, err := serial.GetPortsList()
+	// ports, err := serial.GetPortsList()
+	ports, err := enumerator.GetDetailedPortsList()
 	if err != nil {
 		log.Fatal(err)
 	}
 	if len(ports) == 0 {
 		log.Fatal("No serial ports found!")
-		fmt.Println("cmdInd(): ERROR")
+		fmt.Println("COM Open(): ERROR")
 	}
 
 	// Print the list of detected ports
 	for _, p := range ports {
-		fmt.Printf("Found port: %v\n", p)
+		fmt.Printf("Found port: %v\n", p.Product)
+		if strings.Contains(p.Product, "STMicroelectronics") {
+			com.portName = p.Name
+		}
 	}
-	com.portName = ports[0] // todo
 
 	// Open the first serial port detected at 9600bps N81
 	mode := &serial.Mode{
