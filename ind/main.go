@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"image/color"
+	"runtime"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -14,24 +15,30 @@ import (
 )
 
 var com COM
+var gTabIndex int
 
-// var ColorRED = color.NRGBA{R: 255, G: 0, B: 0, A: 255}
-var ColorRED = color.NRGBA{R: 214, G: 55, B: 55, A: 255} // чуть бледнее
-var ColorGREEN = color.NRGBA{R: 90, G: 210, B: 20, A: 255}
-var ColorBLUE = color.NRGBA{R: 80, G: 110, B: 210, A: 255}
-var ColorWHITE = color.NRGBA{R: 255, G: 255, B: 255, A: 255}
+var colorRED = color.NRGBA{R: 214, G: 55, B: 55, A: 255}
+var colorGREEN = color.NRGBA{R: 90, G: 210, B: 20, A: 255}
+var colorBLUE = color.NRGBA{R: 80, G: 110, B: 210, A: 255}
+var colorWHITE = color.NRGBA{R: 255, G: 255, B: 255, A: 255}
+var colorCream = color.NRGBA{R: 255, G: 0xFD, B: 0xD0, A: 0xFF}
+var colorGray = color.NRGBA{R: 0x7C, G: 0x7C, B: 0x7C, A: 0xFF}
 
 func main() {
 	fmt.Println("Start")
 
-	com.Open()
-	defer com.Close()
-	allIndsOff(com) // переименовать и переделать todo
-
 	a := app.New()
 	w := a.NewWindow("Программа тестирования БУ-3П")
-	w.Resize(fyne.NewSize(800, 540))
+	w.Resize(fyne.NewSize(800, 555))
 	// w.SetFixedSize(true)
+	w.CenterOnScreen()
+
+	errcom := com.Open() // todo
+	if errcom == nil {
+		defer com.Close()
+	}
+
+	com.IndsOff()
 
 	menu := fyne.NewMainMenu(
 		fyne.NewMenu("Файл"),
@@ -55,6 +62,14 @@ func main() {
 		container.NewTabItem("Доп. индикатор", checkAddInd()),
 		container.NewTabItem("Блок реле ", checkRelayBlock()),
 	)
+	go func() {
+		for {
+			gTabIndex = tabs.CurrentTabIndex()
+			// fmt.Println("TAB: ", gTabIndex)
+			time.Sleep(1000 * time.Millisecond)
+			runtime.Gosched()
+		}
+	}()
 
 	tabs.SetTabLocation(container.TabLocationTop)
 	w.SetContent(tabs)
@@ -62,15 +77,15 @@ func main() {
 	w.ShowAndRun()
 }
 
-var currentTheme bool
+var currentTheme bool // светлая тема false
 
 func changeTheme(a fyne.App) {
+	currentTheme = !currentTheme
+
 	if currentTheme {
 		a.Settings().SetTheme(theme.DarkTheme())
-		currentTheme = false
 	} else {
 		a.Settings().SetTheme(theme.LightTheme())
-		currentTheme = true
 	}
 }
 
@@ -88,7 +103,7 @@ func checkMainInd() fyne.CanvasObject {
 
 	var ind1, ind2, ind3 IND
 	inds := container.NewHBox(
-		ind1.Draw(0x7E, 30, 80), //todo задать свои адреса
+		ind1.Draw(0x7E, 30, 80), // todo задать свои адреса
 		ind2.Draw(0x7C, 190, 80),
 		ind3.Draw(0x7A, 350, 80), // отключен на отладочной плате
 	)
@@ -98,40 +113,67 @@ func checkMainInd() fyne.CanvasObject {
 		timeout = convertStrToTimeout(s)
 	})
 	selectbox.SetSelected(times[1])
-	selectbox.Resize(fyne.NewSize(100, 30))
+	selectbox.Resize(fyne.NewSize(100, 40))
 	selectbox.Move(fyne.NewPos(30, 330))
 
 	btnStart := widget.NewButton("Старт", func() {
 		autoCheck = !autoCheck
 	})
-	btnStart.Resize(fyne.NewSize(100, 30))
-	btnStart.Move(fyne.NewPos(180, 330))
+	btnStart.Resize(fyne.NewSize(100, 40))
+	btnStart.Move(fyne.NewPos(160, 330))
 
 	btnReset := widget.NewButton("Сброс", func() {
 		ind1.Reset()
 		ind2.Reset()
 		ind3.Reset()
-		allIndsOff(com)
+		com.IndsOff()
 	})
-	btnReset.Resize(fyne.NewSize(100, 30))
-	btnReset.Move(fyne.NewPos(320, 330))
+	btnReset.Resize(fyne.NewSize(100, 40))
+	btnReset.Move(fyne.NewPos(290, 330))
 
-	// ручная проверка
+	errorLabel := widget.NewLabel(fmt.Sprintf("%s: Нет ошибок соединения", com.portName))
+	errorLabel.Move(fyne.NewPos(420, 330))
+	errorLabel.Hide()
+
+	// отображение ошибок
 	go func() {
 		for {
-			ind1.CheckPressed()
-			ind2.CheckPressed()
-			ind3.CheckPressed()
-			time.Sleep(100 * time.Millisecond)
+			if com.err != nil {
+				errorLabel.SetText(fmt.Sprintf("%s: %s", com.portName, com.err.Error()))
+				errorLabel.Show()
+			} else if _, err := com.Cmd("ver"); err != nil {
+				errorLabel.SetText(fmt.Sprintf("%s: %s", com.portName, err))
+				errorLabel.Show()
+			} else if com.err == nil {
+				errorLabel.Hide()
+			}
+			errorLabel.Refresh()
+			time.Sleep(time.Second)
+		}
+	}()
+
+	// проверка нажатия
+	go func() {
+		for {
+			if gTabIndex == 0 {
+				// fmt.Println("tab 1: process")
+				ind1.CheckPressed()
+				ind2.CheckPressed()
+				ind3.CheckPressed()
+			}
+			time.Sleep(200 * time.Millisecond)
+			runtime.Gosched()
 		}
 	}()
 
 	// автоматическая проверка
 	go func() {
 		for {
-			if autoCheck {
+			if (gTabIndex == 0) && autoCheck {
+				// fmt.Println("tab 1: auto check START")
 				btnStart.SetText("Стоп")
-				for autoCheck {
+				for (gTabIndex == 0) && autoCheck {
+					// fmt.Println("tab 1: auto check")
 					for i := 0; autoCheck && (i <= 7); i++ {
 						ind1.segments[i].pressed = true
 						ind2.segments[i].pressed = true
@@ -144,11 +186,12 @@ func checkMainInd() fyne.CanvasObject {
 				}
 				btnStart.SetText("Старт")
 			}
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(300 * time.Millisecond)
+			runtime.Gosched()
 		}
 	}()
 
-	return container.NewWithoutLayout(label, inds, selectbox, btnStart, btnReset)
+	return container.NewWithoutLayout(label, inds, selectbox, btnStart, btnReset, errorLabel)
 }
 
 // ----------------------------------------------------------------------------- //
@@ -156,30 +199,12 @@ func checkMainInd() fyne.CanvasObject {
 // ----------------------------------------------------------------------------- //
 
 func checkAddInd() fyne.CanvasObject {
+	var autoIndTest bool  // автоматическа проверка индикаторов
+	var startBtnTest bool // проверка кнопок
 
-	buttonsBox := buttons()
-	indsBox := indicators()
+	var btnIndStart, btnBtnStart *widget.Button
 
-	return container.NewBorder(indsBox, buttonsBox, nil, nil)
-}
-
-func convertStrToTimeout(s string) (t time.Duration) {
-	switch s {
-	case "0.5":
-		t = time.Second / 2
-	case "1":
-		t = time.Second
-	case "2":
-		t = 2 * time.Second
-	case "5":
-		t = 5 * time.Second
-	}
-	return
-}
-
-// отрисовка на форме индикаторов и кнопок к ним, обработка нажатия
-func indicators() *fyne.Container {
-	var autoCheck bool
+	// --------------- Индикаторы ---------------------
 	var timeout time.Duration // частота автоматической проверки
 
 	label := canvas.NewText("Дополнительный индикатор", color.Black)
@@ -199,43 +224,79 @@ func indicators() *fyne.Container {
 		timeout = convertStrToTimeout(s)
 	})
 	selectbox.SetSelected(times[1])
-	selectbox.Resize(fyne.NewSize(100, 30))
+	selectbox.Resize(fyne.NewSize(100, 40))
 	selectbox.Move(fyne.NewPos(30, 330))
 
-	btnStart := widget.NewButton("Старт", func() {
-		autoCheck = !autoCheck
-	})
-	btnStart.Resize(fyne.NewSize(100, 30))
-	btnStart.Move(fyne.NewPos(180, 330))
+	btnIndStart = widget.NewButton("Старт", func() {
+		autoIndTest = !autoIndTest
+		if autoIndTest {
+			btnIndStart.SetText("Стоп")
+		} else {
+			btnIndStart.SetText("Старт")
+		}
 
-	btnReset := widget.NewButton("Сброс", func() {
+		startBtnTest = false // не получается делать запросы из двух потоков, зависает COM todo
+		btnBtnStart.SetText("Старт")
+
+	})
+	btnIndStart.Resize(fyne.NewSize(100, 40))
+	btnIndStart.Move(fyne.NewPos(160, 330))
+
+	btnIndReset := widget.NewButton("Сброс", func() {
 		ind1.Reset()
 		ind2.Reset()
 		ind3.Reset()
 		ind4.Reset()
-		allIndsOff(com)
+		com.IndsOff()
 	})
-	btnReset.Resize(fyne.NewSize(100, 30))
-	btnReset.Move(fyne.NewPos(320, 330))
+	btnIndReset.Resize(fyne.NewSize(100, 40))
+	btnIndReset.Move(fyne.NewPos(290, 330))
 
-	// ручная проверка
+	errorLabel := widget.NewLabel(fmt.Sprintf("%s: Нет ошибок соединения", com.portName))
+	errorLabel.Move(fyne.NewPos(420, 330))
+	errorLabel.Hide()
+
+	// отображение ошибок
 	go func() {
 		for {
-			ind1.CheckPressed()
-			ind2.CheckPressed()
-			ind3.CheckPressed()
-			ind4.CheckPressed()
-			time.Sleep(100 * time.Millisecond)
+			if com.err != nil {
+				errorLabel.SetText(fmt.Sprintf("%s: %s", com.portName, com.err.Error()))
+				errorLabel.Show()
+			} else if _, err := com.Cmd("ver"); err != nil {
+				errorLabel.SetText(fmt.Sprintf("%s: %s", com.portName, err))
+				errorLabel.Show()
+			} else if com.err == nil {
+				errorLabel.Hide()
+			}
+			errorLabel.Refresh()
+			time.Sleep(time.Second)
+		}
+	}()
+
+	// проверка нажатых сегментов
+	go func() {
+		for {
+			if gTabIndex == 1 {
+				// fmt.Println("tab 2: process")
+
+				ind1.CheckPressed()
+				ind2.CheckPressed()
+				ind3.CheckPressed()
+				ind4.CheckPressed()
+			}
+			time.Sleep(200 * time.Millisecond)
+			runtime.Gosched()
 		}
 	}()
 
 	// автоматическая проверка
 	go func() {
 		for {
-			if autoCheck {
-				btnStart.SetText("Стоп")
-				for autoCheck {
-					for i := 0; autoCheck && (i <= 7); i++ {
+			if (gTabIndex == 1) && autoIndTest {
+				// btnIndStart.SetText("Стоп")
+				for (gTabIndex == 1) && autoIndTest {
+					// fmt.Println("tab 2: auto check")
+					for i := 0; autoIndTest && (i <= 7); i++ {
 						ind1.segments[i].pressed = true
 						ind2.segments[i].pressed = true
 						ind3.segments[i].pressed = true
@@ -247,23 +308,32 @@ func indicators() *fyne.Container {
 						ind4.Reset()
 					}
 				}
-				btnStart.SetText("Старт")
 			}
-			time.Sleep(100 * time.Millisecond)
+			runtime.Gosched()
+			time.Sleep(300 * time.Millisecond)
 		}
 	}()
 
-	box := container.NewWithoutLayout(label, inds, selectbox, btnStart, btnReset)
+	indsBox := container.NewWithoutLayout(label, inds, selectbox, btnIndStart, btnIndReset)
 
-	return box
-}
+	// ---------------------- Кнопки ---------------------
 
-// отрисовка на форме кнопок, обработка нажатия
-func buttons() *fyne.Container {
+	btnBtnStart = widget.NewButton("Старт", func() {
+		startBtnTest = !startBtnTest
+		if startBtnTest {
+			btnBtnStart.SetText("Стоп")
+		} else {
+			btnBtnStart.SetText("Старт")
+		}
+
+		autoIndTest = false
+		btnIndStart.SetText("Старт")
+	})
 
 	var btnLight, btnP, btnT, btnContr, btnH, btnMin, btnBright BTN
-	grid := container.NewGridWithColumns(
-		7,
+	buttonsBox := container.NewGridWithColumns(
+		8,
+		btnBtnStart,
 		btnLight.Draw(0x01, "Подсв"),
 		btnP.Draw(0x02, "П"),
 		btnT.Draw(0x04, "Т"),
@@ -275,20 +345,39 @@ func buttons() *fyne.Container {
 
 	// проверка нажата ли кнопка на плате
 	go func() {
+		var number int64
 		for {
-			number, _ := ButtonOn(com)
-			btnLight.CheckPressed(number)
-			btnP.CheckPressed(number)
-			btnT.CheckPressed(number)
-			btnContr.CheckPressed(number)
-			btnH.CheckPressed(number)
-			btnMin.CheckPressed(number)
-			btnBright.CheckPressed(number)
-			time.Sleep(100 * time.Millisecond)
+			if (gTabIndex == 1) && startBtnTest {
+				// fmt.Println("tab 2: buttons")
+				number, _ = com.CheckButton()
+				btnLight.CheckPressed(number)
+				btnP.CheckPressed(number)
+				btnT.CheckPressed(number)
+				btnContr.CheckPressed(number)
+				btnH.CheckPressed(number)
+				btnMin.CheckPressed(number)
+				btnBright.CheckPressed(number)
+			}
+			time.Sleep(300 * time.Millisecond)
+			runtime.Gosched()
 		}
 	}()
 
-	return grid
+	return container.NewBorder(indsBox, buttonsBox, nil, nil)
+}
+
+func convertStrToTimeout(s string) (t time.Duration) {
+	switch s {
+	case "0.5":
+		t = time.Second / 2
+	case "1":
+		t = time.Second
+	case "2":
+		t = 2 * time.Second
+	case "5":
+		t = 5 * time.Second
+	}
+	return
 }
 
 // ----------------------------------------------------------------------------- //
@@ -332,13 +421,15 @@ func checkRelayBlock() fyne.CanvasObject {
 //					 Отрисовка индикатора (8 сегментов)							 //
 // ----------------------------------------------------------------------------- //
 
+// IND индикатор
 type IND struct {
 	number      int // 78 7A 7C 7E указывает индикатор
 	litSegments int // все выделенные сегменты
 	segments    [8]SEG
 }
 
-// x, y - смещение индикатора относительно
+// Draw отрисовка
+//  x, y - смещение индикатора относительно
 func (ind *IND) Draw(number int, x, y float32) *fyne.Container {
 	ind.number = number
 
@@ -357,14 +448,7 @@ func (ind *IND) Draw(number int, x, y float32) *fyne.Container {
 	)
 }
 
-// func (ind *IND) Show() { // нужно знать красным или зеленым
-
-// 	for i := 0; i < len(ind.segments); i++ {
-// 		ind.segments[i].Show()
-// 	}
-// }
-
-// только для кнопки общего сброса
+// Hide только для кнопки общего сброса
 func (ind *IND) Hide() {
 
 	for i := 0; i < len(ind.segments); i++ {
@@ -372,23 +456,24 @@ func (ind *IND) Hide() {
 	}
 }
 
-// зажечь на плате сегменты, которые были выбраны (litSegments)
-// (зажигать последний выбранный, но не гасить другие)
-func (ind *IND) LightSegments(com COM) (ok bool) {
+// LightSegments зажечь выбранные(litSegments) сегменты не плате
+func (ind *IND) LightSegments(com COM) (ok bool, err error) {
 
 	cmd := "w" + fmt.Sprintf("%X=", ind.number) + fmt.Sprintf("%X", ind.litSegments) // w78=01
-	ok, _ = IndOn(com, cmd)
+	ok, err = com.CheckInd(cmd)
 	return
 }
 
-/*	Ручная проверка
+/*	ручная проверка
 	Проверка всех 8 сегментов:
 	если сегмент был нажат (pressed), проверить не был ли он уже подсвечен (не спамить в com),
 		подсветить на плате, отметить в окне программы
 	если сегмент был сброшен, проверить не сброшен ли он уже,
 		сбросить на плате, убрать выделение в окне программы
 */
-func (ind *IND) CheckPressed() {
+
+// CheckPressed проверка сегментов
+func (ind *IND) CheckPressed() error {
 
 	for i := 0; i <= 7; i++ {
 		seg := ind.segments[i].number
@@ -397,10 +482,12 @@ func (ind *IND) CheckPressed() {
 			if (ind.litSegments & seg) != seg {
 
 				ind.litSegments |= seg
-				if ind.LightSegments(com) {
-					ind.segments[i].ShowGreen()
-				} else {
-					ind.segments[i].ShowRed()
+				if ok, err := ind.LightSegments(com); err == nil {
+					if ok {
+						ind.segments[i].ShowGreen()
+					} else if !ok {
+						ind.segments[i].ShowRed()
+					}
 				}
 			}
 		} else {
@@ -411,14 +498,13 @@ func (ind *IND) CheckPressed() {
 			}
 		}
 	}
+	return nil
 }
 
+// Reset очистить все сегменты
 func (ind *IND) Reset() {
 	ind.Hide()
 	for i := 0; i <= 7; i++ {
-		ind.segments[i].pressed = false
-		ind.segments[i].pressed = false
-		ind.segments[i].pressed = false
 		ind.segments[i].pressed = false
 	}
 }
@@ -437,7 +523,7 @@ func (ind *IND) Reset() {
   0x08  x80
 */
 
-// Сегмент
+// SEG сегмент
 type SEG struct {
 	number    int
 	pos       fyne.Position
@@ -461,18 +547,16 @@ func getSegmentSize(number int) (s fyne.Size) {
 	return
 }
 
-// number - номер сегмента
-// x, y - смещение от начала координат
+// Draw отрисовка
+// number	- номер сегмента
+// x, y 	- смещение от начала координат
 func (seg *SEG) Draw(number int, x, y float32) *fyne.Container {
-	green := ColorGREEN
-	red := ColorRED
-
 	seg.number = number
 
 	size := getSegmentSize(number)
 	seg.pos = fyne.NewPos(x, y)
-	seg.rectGreen = canvas.NewRectangle(green)
-	seg.rectRed = canvas.NewRectangle(red)
+	seg.rectGreen = canvas.NewRectangle(colorGREEN)
+	seg.rectRed = canvas.NewRectangle(colorRED)
 	btn := widget.NewButton("", func() {
 		seg.pressed = !seg.pressed
 	})
@@ -485,6 +569,7 @@ func (seg *SEG) Draw(number int, x, y float32) *fyne.Container {
 	return box
 }
 
+// ShowGreen отметить сегмент как нажатый
 func (seg *SEG) ShowGreen() {
 	size := getSegmentSize(seg.number)
 	seg.rectGreen.Resize(size)
@@ -494,6 +579,7 @@ func (seg *SEG) ShowGreen() {
 
 }
 
+// ShowRed отметить сегмент как ошибку
 func (seg *SEG) ShowRed() {
 	size := getSegmentSize(seg.number)
 	seg.rectRed.Resize(size)
@@ -502,26 +588,11 @@ func (seg *SEG) ShowRed() {
 	seg.rectRed.Refresh()
 }
 
+// Hide неподсвечивать (сегмент не нажат)
 func (seg *SEG) Hide() {
 	seg.rectRed.Hide()
 	seg.rectGreen.Hide()
 }
-
-/*
-// Зажечь на плате, подсветить кнопку зеленым или красным
-// (для автоматической проверки сегментов покругу)
-func (seg *SEG) CheckSegment(com COM, indNumber int) (ok bool) {
-
-	cmd := "w" + fmt.Sprintf("%X=", indNumber) + fmt.Sprintf("%X", seg.number) // w78=40
-
-	ok, _ = IndOn(com, cmd)
-	if ok {
-		seg.ShowGreen()
-	} else {
-		seg.ShowRed()
-	}
-	return
-}*/
 
 // ----------------------------------------------------------------------------- //
 //									 Кнопки								 		 //
@@ -537,79 +608,73 @@ func (seg *SEG) CheckSegment(com COM, indNumber int) (ok bool) {
 яркость (солнышко)	= 0x40
 */
 
-// Сегмент
+// BTN кнопка
 type BTN struct {
-	number    int
-	rectBlue  *canvas.Rectangle
-	rectRed   *canvas.Rectangle
-	rectWhite *canvas.Rectangle
-	showed    bool
+	number  int
+	button  *widget.Button
+	rectHot *canvas.Rectangle
+	rectErr *canvas.Rectangle
+	showed  bool
 }
 
+// Draw отрисовка
 // number - номер сегмента
 // x, y - смещение от начала координат
 func (btn *BTN) Draw(number int, name string) *fyne.Container {
-	red := ColorRED
-	blue := ColorBLUE
-	white := ColorWHITE
 
 	btn.number = number
-	button := widget.NewButton(name, nil)
-	btn.rectBlue = canvas.NewRectangle(blue)
-	btn.rectRed = canvas.NewRectangle(red)
-	btn.rectWhite = canvas.NewRectangle(white) // без белого треугольника вылезат красный  при NewPadded() почему то
-	// btn.rectBlue.Hide() // если скрыть сразу отрисовка тупит
-	// btn.rectRed.Hide()
+	btn.button = widget.NewButton(name, nil)
+	btn.rectHot = canvas.NewRectangle(colorBLUE)
+	btn.rectErr = canvas.NewRectangle(colorRED)
+	btn.rectHot.Hide()
+	btn.rectHot.Refresh()
+	btn.rectErr.Hide()
+	btn.rectErr.Refresh()
 
 	box := container.NewPadded(
-		btn.rectBlue, btn.rectRed, btn.rectWhite, button,
+		btn.rectHot, btn.rectErr, btn.button,
 	)
 
 	return box
 }
 
-// проверяется нажатие на кнопку на плате
+// CheckPressed проверяет было ли нажатие на кнопку на плате
 // отмечается нажатая кнопка на экране
+// number -- все нажатые на текущий момент кнопки
 func (btn *BTN) CheckPressed(number int64) {
 
 	if number == -1 {
-		btn.ShowRed()
-	}
-	if (int(number) & btn.number) == btn.number { // если кнопка нажата
-		if !btn.showed { // не отрисовывать лишний раз
-			btn.showed = true
-			btn.ShowBlue()
-		}
-	} else { // не нажата
-		if btn.showed {
-			btn.showed = false
-			btn.Hide()
-		}
+		btn.ShowErr()
+	} else if (int(number) & btn.number) == btn.number {
+		btn.Show()
+	} else {
+		btn.Hide()
 	}
 }
 
-func (btn *BTN) ShowRed() {
-	btn.rectBlue.Hide()
-	btn.rectWhite.Hide()
-
-	btn.rectRed.Show()
-	btn.rectRed.Refresh()
+// ShowErr отметить кнопку как ошибку
+func (btn *BTN) ShowErr() {
+	btn.rectErr.Show()
+	btn.rectErr.Refresh()
+	btn.button.Refresh()
 }
 
-func (btn *BTN) ShowBlue() {
-	btn.rectWhite.Hide()
-	btn.rectRed.Hide()
-
-	btn.rectBlue.Show()
-	btn.rectBlue.Refresh()
+// Show отметить кнопку как нажатую
+func (btn *BTN) Show() {
+	btn.rectHot.Show()
+	btn.rectHot.Refresh()
+	btn.button.Refresh()
 }
 
+// Hide не подсвечивать кнопки
 func (btn *BTN) Hide() {
-	btn.rectRed.Hide()
-	btn.rectBlue.Hide()
+	btn.rectErr.Hide()
+	btn.rectErr.Refresh()
 
-	btn.rectWhite.Show()
-	btn.rectWhite.Refresh()
+	btn.rectHot.Hide()
+	btn.rectHot.Refresh()
+
+	btn.button.Refresh()
 }
 
 // ----------------------------------------------------------------------------- //
