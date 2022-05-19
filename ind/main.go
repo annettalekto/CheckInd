@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"image/color"
+	"os/exec"
 	"runtime"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
@@ -32,8 +34,10 @@ func main() {
 	w.Resize(fyne.NewSize(800, 555))
 	// w.SetFixedSize(true)
 	w.CenterOnScreen()
+	r, _ := LoadResourceFromPath("./icon.png")
+	w.SetIcon(r)
 
-	errcom := com.Open() // todo
+	errcom := com.Open() // todo переинициализацию?
 	if errcom == nil {
 		defer com.Close()
 	}
@@ -45,12 +49,13 @@ func main() {
 		// fyne.NewMenuItem("Выход (Alt+F4)", func() { a.Quit() }),
 		// a quit item will be appended to our first menu
 		fyne.NewMenu("Опции",
-			fyne.NewMenuItem("Параметры", nil),
+			// fyne.NewMenuItem("Параметры", nil),
 			fyne.NewMenuItem("Тема", func() { changeTheme(a) }),
 			// fyne.NewMenuItem("Paste", func() { fmt.Println("Menu Paste") }),
 		),
 		fyne.NewMenu("Справка",
-			fyne.NewMenuItem("Пункт 1", func() { fmt.Println("Что-то 1") }),
+			fyne.NewMenuItem("Справка", func() { abautHelp() }),
+			fyne.NewMenuItem("О программе", func() { abautProgramm() }),
 		),
 	)
 
@@ -87,6 +92,29 @@ func changeTheme(a fyne.App) {
 	} else {
 		a.Settings().SetTheme(theme.LightTheme())
 	}
+}
+
+func abautHelp() {
+	err := exec.Command("cmd", "/C", ".\\help\\index.htm").Run()
+	if err != nil {
+		fmt.Println("Ошибка открытия файла справки")
+	}
+}
+
+func abautProgramm() { // можно просто Info
+	w := fyne.CurrentApp().NewWindow("О программе") // CurrentApp!
+	w.Resize(fyne.NewSize(400, 200))
+	w.CenterOnScreen()
+
+	l0 := canvas.NewText("Программа проверки индикаторов", color.Black)
+	l0.TextSize = 16
+	l0.Move(fyne.NewPos(20, 20))
+	l1 := canvas.NewText("Версия 1", color.Black)
+	l0.TextSize = 14
+	l2 := canvas.NewText("© 2022 ПАО «Электромеханика»", color.Black)
+	text := container.NewVBox(l0, l1, l2)
+	w.SetContent(fyne.NewContainerWithLayout(layout.NewCenterLayout(), text))
+	w.Show() // ShowAndRun -- panic
 }
 
 // ----------------------------------------------------------------------------- //
