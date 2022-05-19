@@ -54,7 +54,7 @@ func main() {
 			// fyne.NewMenuItem("Paste", func() { fmt.Println("Menu Paste") }),
 		),
 		fyne.NewMenu("Справка",
-			fyne.NewMenuItem("Справка", func() { abautHelp() }),
+			fyne.NewMenuItem("Справка", func() { aboutHelp() }),
 			fyne.NewMenuItem("О программе", func() { abautProgramm() }),
 		),
 	)
@@ -94,7 +94,7 @@ func changeTheme(a fyne.App) {
 	}
 }
 
-func abautHelp() {
+func aboutHelp() {
 	err := exec.Command("cmd", "/C", ".\\help\\index.htm").Run()
 	if err != nil {
 		fmt.Println("Ошибка открытия файла справки")
