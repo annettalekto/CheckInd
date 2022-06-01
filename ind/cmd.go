@@ -75,42 +75,52 @@ func (com *COM) Close() {
 // Cmd отправить команду в COM
 func (com *COM) Cmd(cmd string) (answer string, err error) {
 	if com.err != nil || com.port == nil || com.portName == "" {
-		err = errors.New("ошибка связи")
+		err = errors.New("com == nil")
 		return
 	}
 
-	_, err = com.port.Write([]byte(cmd + "\n\r"))
-	if err != nil {
-		err = errors.New("ошибка записи")
-		fmt.Println(err)
-		com.err = err
-		return
-	}
-	// fmt.Printf("Sent %v bytes\n", n)
+	if !com.process {
+		com.process = true
 
-	// Read and print the response
-	buff := make([]byte, 100)
-	start := time.Now()
-	for time.Since(start) <= (time.Second / 2) { //todo ограничить время приема
-		// Reads up to 100 bytes
-		n, err := com.port.Read(buff)
+		_, err = com.port.Write([]byte(cmd + "\n\r"))
 		if err != nil {
-			err = errors.New("ошибка чтения")
-			com.err = err
+			err = errors.New("ошибка записи")
 			fmt.Println(err)
+			com.err = err
+			return
 		}
-		if n == 0 {
-			// fmt.Println("\nEOF")
-			break
-		}
+		// fmt.Printf("Sent %v bytes\n", n)
 
-		// fmt.Printf("%s", string(buff[:n]))
-		answer += string(buff[:n])
+		// Read and print the response
+		buff := make([]byte, 100)
+		start := time.Now()
+		for time.Since(start) <= (time.Second / 2) { //todo ограничить время приема
+			// Reads up to 100 bytes
+			n, err := com.port.Read(buff)
+			if err != nil {
+				err = errors.New("ошибка чтения")
+				com.err = err
+				fmt.Println(err)
+			}
+			if n == 0 {
+				// fmt.Println("\nEOF")
+				break
+			}
 
-		// If we receive a newline stop reading
-		if strings.Contains(string(buff[:n]), "\n") {
-			break
+			// fmt.Printf("%s", string(buff[:n]))
+			answer += string(buff[:n])
+
+			// If we receive a newline stop reading
+			if strings.Contains(string(buff[:n]), "\n") {
+				break
+			}
 		}
+		fmt.Println(answer)
+
+		com.process = false
+	} else {
+		err = errors.New("process")
+		fmt.Println("ERR PROCESS")
 	}
 
 	return
@@ -128,31 +138,23 @@ func (com *COM) CheckInd(cmd string) (result bool, err error) {
 	temp := strings.Split(cmd, "=")
 	numberInd := temp[0] // например "w7E"
 
-	if !com.process {
-		com.process = true
+	answer, err = com.Cmd(cmd) // переименовать todo
+	// fmt.Println(answer)
 
-		answer, err = com.Cmd(cmd) // переименовать todo
-		fmt.Println(answer)
-
-		if err != nil {
-			err = errors.New("ошибка передачи данных")
-			return
-		}
-		if strings.Contains(answer, numberInd) && strings.Contains(answer, "\r\n") { // есть начало и конец строки
-			if strings.Contains(answer, "OK") {
-				result = true
-			} else if strings.Contains(answer, "ERR") {
-				result = false
-			} else {
-				err = errors.New("некорректый ответ")
-			}
+	if err != nil {
+		err = errors.New("ошибка передачи данных")
+		return
+	}
+	if strings.Contains(answer, numberInd) && strings.Contains(answer, "\r\n") { // есть начало и конец строки
+		if strings.Contains(answer, "OK") {
+			result = true
+		} else if strings.Contains(answer, "ERR") {
+			result = false
 		} else {
-			err = errors.New("некорректный ответ")
+			err = errors.New("некорректый ответ")
 		}
-
-		com.process = false
 	} else {
-		err = errors.New("process")
+		err = errors.New("некорректный ответ")
 	}
 
 	return
@@ -163,34 +165,27 @@ func (com *COM) CheckInd(cmd string) (result bool, err error) {
 func (com *COM) CheckButton() (btn int64, err error) {
 	var answer string
 
-	if !com.process {
-		com.process = true
+	answer, err = com.Cmd("r70")
+	// fmt.Println(answer)
 
-		answer, err = com.Cmd("r70")
-		fmt.Println(answer)
+	if err != nil {
+		err = errors.New("ошибка передачи данных")
+		return
+	}
 
-		if err != nil {
-			err = errors.New("ошибка передачи данных")
-			return
-		}
-
-		if strings.Contains(answer, "r70") && strings.Contains(answer, "\r\n") { // есть начало и конец строки
-			if strings.Contains(answer, "ERR") {
-				btn = -1 //
-			} else if strings.Contains(answer, "=") {
-				temp := strings.Split(answer, "=")
-				s := temp[1]
-				s = strings.TrimRight(s, "\r\n")
-				btn, err = strconv.ParseInt(s, 16, 64)
-			} else {
-				err = errors.New("некорректынф ответ")
-			}
+	if strings.Contains(answer, "r70") && strings.Contains(answer, "\r\n") { // есть начало и конец строки
+		if strings.Contains(answer, "ERR") {
+			btn = -1 //
+		} else if strings.Contains(answer, "=") {
+			temp := strings.Split(answer, "=")
+			s := temp[1]
+			s = strings.TrimRight(s, "\r\n")
+			btn, err = strconv.ParseInt(s, 16, 64)
 		} else {
-			err = errors.New("некорректный ответ")
+			err = errors.New("некорректынф ответ")
 		}
-		com.process = false
 	} else {
-		err = errors.New("process")
+		err = errors.New("некорректный ответ")
 	}
 
 	return

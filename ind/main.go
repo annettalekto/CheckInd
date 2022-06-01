@@ -71,8 +71,18 @@ func main() {
 		for {
 			gTabIndex = tabs.CurrentTabIndex()
 			// fmt.Println("TAB: ", gTabIndex)
+
+			// version, err := com.Cmd("ver")
+			// if err != nil {
+			// 	com.err = err
+			// } else if strings.Contains(version, "Version") {
+			// 	com.err = nil
+			// } else {
+			// 	com.err = errors.New("нет ответа на запрос версии")
+			// }
+
 			time.Sleep(1000 * time.Millisecond)
-			runtime.Gosched()
+			// runtime.Gosched()
 		}
 	}()
 
@@ -120,6 +130,7 @@ func abautProgramm() { // можно просто Info
 // ----------------------------------------------------------------------------- //
 //						 Таб1: Основной индикатор								 //
 // ----------------------------------------------------------------------------- //
+// Индикатор для вывода скорости на БУ и БИ (3 индикатора)
 
 func checkMainInd() fyne.CanvasObject {
 	var autoCheck bool
@@ -169,14 +180,16 @@ func checkMainInd() fyne.CanvasObject {
 			if com.err != nil {
 				errorLabel.SetText(fmt.Sprintf("%s: %s", com.portName, com.err.Error()))
 				errorLabel.Show()
-			} else if _, err := com.Cmd("ver"); err != nil {
+			}
+			/*if _, err := com.Cmd("ver"); err != nil {
 				errorLabel.SetText(fmt.Sprintf("%s: %s", com.portName, err))
 				errorLabel.Show()
-			} else if com.err == nil {
+			}*/
+			if com.err == nil {
 				errorLabel.Hide()
 			}
 			errorLabel.Refresh()
-			time.Sleep(time.Second)
+			time.Sleep(1000 * time.Millisecond)
 		}
 	}()
 
@@ -189,7 +202,7 @@ func checkMainInd() fyne.CanvasObject {
 				ind2.CheckPressed()
 				ind3.CheckPressed()
 			}
-			time.Sleep(200 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond)
 			runtime.Gosched()
 		}
 	}()
@@ -214,7 +227,7 @@ func checkMainInd() fyne.CanvasObject {
 				}
 				btnStart.SetText("Старт")
 			}
-			time.Sleep(300 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond)
 			runtime.Gosched()
 		}
 	}()
@@ -225,6 +238,8 @@ func checkMainInd() fyne.CanvasObject {
 // ----------------------------------------------------------------------------- //
 //					 Таб2: Дополнительный индикатор								 //
 // ----------------------------------------------------------------------------- //
+// Индикаторы для вывода дополнительной информации на БУ и БИ (4 индикатора),
+// на этой же плате клавиатура (4 кнопки меню + 2 кн.подсветки)
 
 func checkAddInd() fyne.CanvasObject {
 	var autoIndTest bool  // автоматическа проверка индикаторов
@@ -287,33 +302,24 @@ func checkAddInd() fyne.CanvasObject {
 	// отображение ошибок
 	go func() {
 		for {
-			if com.err != nil {
+			if com.err == nil {
+				errorLabel.Hide()
+			} else {
 				errorLabel.SetText(fmt.Sprintf("%s: %s", com.portName, com.err.Error()))
 				errorLabel.Show()
-			} else if _, err := com.Cmd("ver"); err != nil {
-				errorLabel.SetText(fmt.Sprintf("%s: %s", com.portName, err))
-				errorLabel.Show()
-			} else if com.err == nil {
-				errorLabel.Hide()
 			}
+			// if com.err != nil {
+			// 	errorLabel.SetText(fmt.Sprintf("%s: %s", com.portName, com.err.Error()))
+			// 	errorLabel.Show()
+			// } else if _, err := com.Cmd("ver"); err != nil {
+			// 	errorLabel.SetText(fmt.Sprintf("%s: %s", com.portName, err))
+			// 	errorLabel.Show()
+			// } else if com.err == nil {
+			// 	errorLabel.Hide()
+			// }
 			errorLabel.Refresh()
 			time.Sleep(time.Second)
-		}
-	}()
-
-	// проверка нажатых сегментов
-	go func() {
-		for {
-			if gTabIndex == 1 {
-				// fmt.Println("tab 2: process")
-
-				ind1.CheckPressed()
-				ind2.CheckPressed()
-				ind3.CheckPressed()
-				ind4.CheckPressed()
-			}
-			time.Sleep(200 * time.Millisecond)
-			runtime.Gosched()
+			// runtime.Gosched()
 		}
 	}()
 
@@ -337,8 +343,8 @@ func checkAddInd() fyne.CanvasObject {
 					}
 				}
 			}
+			time.Sleep(100 * time.Millisecond) //300
 			runtime.Gosched()
-			time.Sleep(300 * time.Millisecond)
 		}
 	}()
 
@@ -371,11 +377,42 @@ func checkAddInd() fyne.CanvasObject {
 		btnBright.Draw(0x40, "Ярк"),
 	)
 
-	// проверка нажата ли кнопка на плате
+	// проверка нажатых сегментов
 	go func() {
-		var number int64
 		for {
-			if (gTabIndex == 1) && startBtnTest {
+			if gTabIndex == 1 {
+				// fmt.Println("tab 2: process")
+
+				ind1.CheckPressed()
+				ind2.CheckPressed()
+				ind3.CheckPressed()
+				ind4.CheckPressed()
+				//-------------------
+				var number int64
+				// fmt.Println("tab 2: buttons")
+				number, _ = com.CheckButton()
+				btnLight.CheckPressed(number)
+				btnP.CheckPressed(number)
+				btnT.CheckPressed(number)
+				btnContr.CheckPressed(number)
+				btnH.CheckPressed(number)
+				btnMin.CheckPressed(number)
+				btnBright.CheckPressed(number)
+				//-------------------
+			}
+
+			time.Sleep(100 * time.Millisecond) //200
+			runtime.Gosched()
+
+			// todo нажатие кнопок в этот поток
+		}
+	}()
+
+	// проверка нажата ли кнопка на плате
+	/*go func() {
+		for {
+			if gTabIndex == 1 && startBtnTest {
+				var number int64
 				// fmt.Println("tab 2: buttons")
 				number, _ = com.CheckButton()
 				btnLight.CheckPressed(number)
@@ -389,7 +426,7 @@ func checkAddInd() fyne.CanvasObject {
 			time.Sleep(300 * time.Millisecond)
 			runtime.Gosched()
 		}
-	}()
+	}()*/
 
 	return container.NewBorder(indsBox, buttonsBox, nil, nil)
 }
@@ -411,13 +448,25 @@ func convertStrToTimeout(s string) (t time.Duration) {
 // ----------------------------------------------------------------------------- //
 //							 Таб3:	Блок реле		 							 //
 // ----------------------------------------------------------------------------- //
+// Плата с релюхами (5 реле) уставок скоростей БУ
 
 func checkRelayBlock() fyne.CanvasObject {
+	var autoCheck bool
+	var timeout time.Duration // частота автоматической проверки
+
 	basicLabel := canvas.NewText("Блок реле", color.Black)
 	basicLabel.TextSize = 20
 	basicLabel.Move(fyne.NewPos(20, 20))
 
-	btn0 := widget.NewButton("0", nil)
+	times := []string{"0.5", "1", "2", "5"}
+	selectbox := widget.NewSelect(times, func(s string) {
+		timeout = convertStrToTimeout(s)
+	})
+	selectbox.SetSelected(times[1])
+	selectbox.Resize(fyne.NewSize(100, 40))
+	selectbox.Move(fyne.NewPos(30, 330))
+
+	btn0 := widget.NewButton("0", nil) // todo добавить pressed и исп те же функции?
 	btn1 := widget.NewButton("0", nil)
 	btn2 := widget.NewButton("0", nil)
 	btn3 := widget.NewButton("0", nil)
@@ -432,15 +481,41 @@ func checkRelayBlock() fyne.CanvasObject {
 
 	grid := container.NewGridWithColumns(
 		5,
-		label0, label1, label2, label3, label4,
-		btn0, btn1, btn2, btn3, btn4,
+		label4, label3, label2, label1, label0,
+		btn4, btn3, btn2, btn1, btn0,
 	)
 
-	btnStart := widget.NewButton("Старт", nil)
-	btnStart.Resize(fyne.NewSize(100, 30))
-	btnStart.Move(fyne.NewPos(20, 330))
+	btnStart := widget.NewButton("Старт", func() {
+		autoCheck = !autoCheck
+	})
+	btnStart.Resize(fyne.NewSize(100, 40))
+	btnStart.Move(fyne.NewPos(160, 330))
 
-	box0 := container.NewWithoutLayout(basicLabel, btnStart)
+	errorLabel := widget.NewLabel(fmt.Sprintf("%s: Нет ошибок соединения", com.portName))
+	errorLabel.Move(fyne.NewPos(420, 330))
+	errorLabel.Hide()
+
+	box0 := container.NewWithoutLayout(basicLabel, selectbox, btnStart, errorLabel)
+
+	// автоматическая проверка
+	go func() {
+		for {
+			if (gTabIndex == 2) && autoCheck {
+				// fmt.Println("tab 3: auto check START")
+				btnStart.SetText("Стоп")
+				for (gTabIndex == 2) && autoCheck {
+					// fmt.Println("tab 1: auto check")
+					for i := 0; autoCheck && (i <= 7); i++ {
+						//
+						time.Sleep(timeout)
+					}
+				}
+				btnStart.SetText("Старт")
+			}
+			time.Sleep(300 * time.Millisecond)
+			runtime.Gosched()
+		}
+	}()
 
 	return container.NewVBox(box0, label, grid)
 }
@@ -640,9 +715,9 @@ func (seg *SEG) Hide() {
 type BTN struct {
 	number  int
 	button  *widget.Button
-	rectHot *canvas.Rectangle
+	rectHot *canvas.Rectangle //pressed? todo
 	rectErr *canvas.Rectangle
-	showed  bool
+	// showed  bool
 }
 
 // Draw отрисовка
