@@ -34,6 +34,8 @@ func main() {
 	w.Resize(fyne.NewSize(800, 555))
 	// w.SetFixedSize(true)
 	w.CenterOnScreen()
+	w.SetMaster()
+
 	r, _ := LoadResourceFromPath("./icon.png")
 	w.SetIcon(r)
 
@@ -41,38 +43,48 @@ func main() {
 	if errcom == nil {
 		defer com.Close()
 	}
-
 	com.IndsOff()
 
 	menu := fyne.NewMainMenu(
 		fyne.NewMenu("Файл"),
-		// fyne.NewMenuItem("Выход (Alt+F4)", func() { a.Quit() }),
 		// a quit item will be appended to our first menu
+		// fyne.NewMenuItem("Выход (Alt+F4)", func() { a.Quit() }),
+
 		fyne.NewMenu("Опции",
 			// fyne.NewMenuItem("Параметры", nil),
 			fyne.NewMenuItem("Тема", func() { changeTheme(a) }),
-			// fyne.NewMenuItem("Paste", func() { fmt.Println("Menu Paste") }),
 		),
 		fyne.NewMenu("Справка",
-			fyne.NewMenuItem("Справка", func() { aboutHelp() }),
+			fyne.NewMenuItem("Посмотреть справку", func() { aboutHelp() }),
+			fyne.NewMenuItemSeparator(),
 			fyne.NewMenuItem("О программе", func() { abautProgramm() }),
 		),
 	)
-
 	w.SetMainMenu(menu)
-	w.SetMaster()
+
+	go func() { // простите
+		time.Sleep(2 * time.Second)
+		for _, item := range menu.Items[0].Items {
+			if item.Label == "Quit" {
+				item.Label = "Выход (Alt+F4)"
+			}
+		}
+	}()
 
 	tabs := container.NewAppTabs(
 		container.NewTabItem("Осн. индикатор", checkMainInd()),
 		container.NewTabItem("Доп. индикатор", checkAddInd()),
 		container.NewTabItem("Блок реле ", checkRelayBlock()),
 	)
+	// tabs.SetTabLocation(container.TabLocationTop)
+	tabs.SetTabLocation(container.TabLocationBottom)
+
 	go func() {
 		for {
 			gTabIndex = tabs.CurrentTabIndex()
 			// fmt.Println("TAB: ", gTabIndex)
 
-			// version, err := com.Cmd("ver")
+			// version, err := com.Cmd("ver") // todo вывод ошибки, переинициализация COM
 			// if err != nil {
 			// 	com.err = err
 			// } else if strings.Contains(version, "Version") {
@@ -86,9 +98,7 @@ func main() {
 		}
 	}()
 
-	tabs.SetTabLocation(container.TabLocationTop)
 	w.SetContent(tabs)
-
 	w.ShowAndRun()
 }
 
@@ -124,7 +134,7 @@ func abautProgramm() { // можно просто Info
 	l2 := canvas.NewText("© 2022 ПАО «Электромеханика»", color.Black)
 	text := container.NewVBox(l0, l1, l2)
 	w.SetContent(fyne.NewContainerWithLayout(layout.NewCenterLayout(), text))
-	w.Show() // ShowAndRun -- panic
+	w.Show() // ShowAndRun -- panic!
 }
 
 // ----------------------------------------------------------------------------- //
@@ -242,12 +252,7 @@ func checkMainInd() fyne.CanvasObject {
 // на этой же плате клавиатура (4 кнопки меню + 2 кн.подсветки)
 
 func checkAddInd() fyne.CanvasObject {
-	var autoIndTest bool  // автоматическа проверка индикаторов
-	var startBtnTest bool // проверка кнопок
-
-	var btnIndStart, btnBtnStart *widget.Button
-
-	// --------------- Индикаторы ---------------------
+	var autoIndTest bool      // автоматическа проверка индикаторов
 	var timeout time.Duration // частота автоматической проверки
 
 	label := canvas.NewText("Дополнительный индикатор", color.Black)
@@ -270,6 +275,7 @@ func checkAddInd() fyne.CanvasObject {
 	selectbox.Resize(fyne.NewSize(100, 40))
 	selectbox.Move(fyne.NewPos(30, 330))
 
+	var btnIndStart *widget.Button
 	btnIndStart = widget.NewButton("Старт", func() {
 		autoIndTest = !autoIndTest
 		if autoIndTest {
@@ -277,10 +283,6 @@ func checkAddInd() fyne.CanvasObject {
 		} else {
 			btnIndStart.SetText("Старт")
 		}
-
-		startBtnTest = false // не получается делать запросы из двух потоков, зависает COM todo
-		btnBtnStart.SetText("Старт")
-
 	})
 	btnIndStart.Resize(fyne.NewSize(100, 40))
 	btnIndStart.Move(fyne.NewPos(160, 330))
@@ -298,6 +300,8 @@ func checkAddInd() fyne.CanvasObject {
 	errorLabel := widget.NewLabel(fmt.Sprintf("%s: Нет ошибок соединения", com.portName))
 	errorLabel.Move(fyne.NewPos(420, 330))
 	errorLabel.Hide()
+
+	indsBox := container.NewWithoutLayout(label, inds, selectbox, btnIndStart, btnIndReset)
 
 	// отображение ошибок
 	go func() {
@@ -323,7 +327,7 @@ func checkAddInd() fyne.CanvasObject {
 		}
 	}()
 
-	// автоматическая проверка
+	// автоматическая проверка индикаторов
 	go func() {
 		for {
 			if (gTabIndex == 1) && autoIndTest {
@@ -343,31 +347,14 @@ func checkAddInd() fyne.CanvasObject {
 					}
 				}
 			}
-			time.Sleep(100 * time.Millisecond) //300
+			time.Sleep(100 * time.Millisecond)
 			runtime.Gosched()
 		}
 	}()
 
-	indsBox := container.NewWithoutLayout(label, inds, selectbox, btnIndStart, btnIndReset)
-
-	// ---------------------- Кнопки ---------------------
-
-	btnBtnStart = widget.NewButton("Старт", func() {
-		startBtnTest = !startBtnTest
-		if startBtnTest {
-			btnBtnStart.SetText("Стоп")
-		} else {
-			btnBtnStart.SetText("Старт")
-		}
-
-		autoIndTest = false
-		btnIndStart.SetText("Старт")
-	})
-
 	var btnLight, btnP, btnT, btnContr, btnH, btnMin, btnBright BTN
 	buttonsBox := container.NewGridWithColumns(
-		8,
-		btnBtnStart,
+		7,
 		btnLight.Draw(0x01, "Подсв"),
 		btnP.Draw(0x02, "П"),
 		btnT.Draw(0x04, "Т"),
@@ -377,17 +364,15 @@ func checkAddInd() fyne.CanvasObject {
 		btnBright.Draw(0x40, "Ярк"),
 	)
 
-	// проверка нажатых сегментов
+	// проверка нажатых элементов (запись в COM, отрисовка)
 	go func() {
 		for {
 			if gTabIndex == 1 {
 				// fmt.Println("tab 2: process")
-
 				ind1.CheckPressed()
 				ind2.CheckPressed()
 				ind3.CheckPressed()
 				ind4.CheckPressed()
-				//-------------------
 				// fmt.Println("tab 2: buttons")
 				number, _ := com.CheckButton()
 				btnLight.CheckPressed(number)
@@ -397,35 +382,11 @@ func checkAddInd() fyne.CanvasObject {
 				btnH.CheckPressed(number)
 				btnMin.CheckPressed(number)
 				btnBright.CheckPressed(number)
-				//-------------------
 			}
-
-			time.Sleep(100 * time.Millisecond) //200
+			time.Sleep(200 * time.Millisecond)
 			runtime.Gosched()
-
-			// todo нажатие кнопок в этот поток
 		}
 	}()
-
-	// проверка нажата ли кнопка на плате
-	/*go func() {
-		for {
-			if gTabIndex == 1 && startBtnTest {
-				var number int64
-				// fmt.Println("tab 2: buttons")
-				number, _ = com.CheckButton()
-				btnLight.CheckPressed(number)
-				btnP.CheckPressed(number)
-				btnT.CheckPressed(number)
-				btnContr.CheckPressed(number)
-				btnH.CheckPressed(number)
-				btnMin.CheckPressed(number)
-				btnBright.CheckPressed(number)
-			}
-			time.Sleep(300 * time.Millisecond)
-			runtime.Gosched()
-		}
-	}()*/
 
 	return container.NewBorder(indsBox, buttonsBox, nil, nil)
 }
@@ -468,16 +429,8 @@ func checkRelayBlock() fyne.CanvasObject {
 	var relay0, relay1, relay2, relay3, relay4 BTN
 	relaySlice := []*BTN{&relay0, &relay1, &relay2, &relay3, &relay4}
 
-	// label := widget.NewLabel("") /// """"""""""""""""""""""""""
-	label0 := widget.NewLabel("0")
-	label1 := widget.NewLabel("1")
-	label2 := widget.NewLabel("2")
-	label3 := widget.NewLabel("3")
-	label4 := widget.NewLabel("4")
-
 	relayBox := container.NewGridWithColumns(
 		5,
-		label4, label3, label2, label1, label0,
 		relay4.Draw(0x10, "4"), relay3.Draw(0x08, "3"), relay2.Draw(0x04, "2"), relay1.Draw(0x02, "1"), relay0.Draw(0x01, "0"),
 	)
 
@@ -491,9 +444,7 @@ func checkRelayBlock() fyne.CanvasObject {
 	errorLabel.Move(fyne.NewPos(420, 330))
 	errorLabel.Hide()
 
-	// box := container.NewWithoutLayout(basicLabel, selectbox, btnStart, errorLabel)
-
-	// проверка нажатых сегментов
+	// проверка нажатых сегментов (запись в COM, отрисовка)
 	go func() {
 		var pressedRelays int // все реле установленные в единицу
 		changedbit := false
@@ -522,7 +473,7 @@ func checkRelayBlock() fyne.CanvasObject {
 					}
 				}
 			}
-			time.Sleep(100 * time.Millisecond) //200
+			time.Sleep(100 * time.Millisecond)
 			runtime.Gosched()
 		}
 	}()
@@ -531,13 +482,13 @@ func checkRelayBlock() fyne.CanvasObject {
 	go func() {
 		for {
 			if (gTabIndex == 2) && autoCheck {
-				fmt.Println("tab 3: auto check START")
+				// fmt.Println("tab 3: auto check START")
 				btnStart.SetText("Стоп")
 				for _, button := range relaySlice {
 					button.pressed = false
 				}
 				for (gTabIndex == 2) && autoCheck {
-					fmt.Println("tab 3: auto check")
+					// fmt.Println("tab 3: auto check")
 
 					for _, button := range relaySlice {
 						button.pressed = true
@@ -555,9 +506,10 @@ func checkRelayBlock() fyne.CanvasObject {
 		}
 	}()
 
-	box := container.NewWithoutLayout(basicLabel, selectbox, btnStart, errorLabel)
-	return container.NewBorder(box, relayBox, nil, nil)
+	voidLabel := widget.NewLabel("")
 
+	box := container.NewWithoutLayout(basicLabel, selectbox, btnStart, errorLabel)
+	return container.NewVBox(box, voidLabel, voidLabel, relayBox) // не понятно как делать разметку, использую пустой лейбл чтобы опустить контейнер ниже
 }
 
 // ----------------------------------------------------------------------------- //
