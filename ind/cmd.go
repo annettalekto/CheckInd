@@ -115,7 +115,7 @@ func (com *COM) Cmd(cmd string) (answer string, err error) {
 				break
 			}
 		}
-		fmt.Println(answer)
+		fmt.Println("answer: " + answer)
 
 		com.process = false
 	} else {
@@ -175,14 +175,57 @@ func (com *COM) CheckButton() (btn int64, err error) {
 
 	if strings.Contains(answer, "r70") && strings.Contains(answer, "\r\n") { // есть начало и конец строки
 		if strings.Contains(answer, "ERR") {
-			btn = -1 //
+			btn = -1
 		} else if strings.Contains(answer, "=") {
 			temp := strings.Split(answer, "=")
 			s := temp[1]
 			s = strings.TrimRight(s, "\r\n")
 			btn, err = strconv.ParseInt(s, 16, 64)
 		} else {
-			err = errors.New("некорректынф ответ")
+			err = errors.New("некорректый ответ")
+		}
+	} else {
+		err = errors.New("некорректный ответ")
+	}
+
+	return
+}
+
+// CheckRelay проверить какие биты (реле) установлены в единицу
+// bits - биты которые нужно установить
+// relay - возвращает установленные биты
+func (com *COM) CheckRelay(bits int) (setbits int64, err error) {
+	var answer string
+
+	// установить все нужные биты, например: w42=FF (первые биты лишние, таких реле нет на плате)
+	// прочитать установленные в единицу биты: r45=0F
+
+	cmd := "w42=" + fmt.Sprintf("%X", bits)
+	fmt.Println("write: " + cmd)
+	answer, err = com.Cmd(cmd) // установка
+
+	if err != nil || !strings.Contains(answer, "OK") {
+		err = errors.New("ошибка передачи данных")
+		return
+	}
+	time.Sleep(20 * time.Millisecond)
+
+	answer, err = com.Cmd("r45") // чтение
+	if err != nil {
+		err = errors.New("ошибка передачи данных")
+		return
+	}
+
+	if strings.Contains(answer, "r45") && strings.Contains(answer, "\r\n") { // есть начало и конец строки
+		if strings.Contains(answer, "ERR") {
+			setbits = -1
+		} else if strings.Contains(answer, "=") {
+			temp := strings.Split(answer, "=") // r45=0F
+			s := temp[1]
+			s = strings.TrimRight(s, "\r\n")
+			setbits, err = strconv.ParseInt(s, 16, 64)
+		} else {
+			err = errors.New("некорректый ответ")
 		}
 	} else {
 		err = errors.New("некорректный ответ")

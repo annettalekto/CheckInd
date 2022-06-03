@@ -388,9 +388,8 @@ func checkAddInd() fyne.CanvasObject {
 				ind3.CheckPressed()
 				ind4.CheckPressed()
 				//-------------------
-				var number int64
 				// fmt.Println("tab 2: buttons")
-				number, _ = com.CheckButton()
+				number, _ := com.CheckButton()
 				btnLight.CheckPressed(number)
 				btnP.CheckPressed(number)
 				btnT.CheckPressed(number)
@@ -466,23 +465,20 @@ func checkRelayBlock() fyne.CanvasObject {
 	selectbox.Resize(fyne.NewSize(100, 40))
 	selectbox.Move(fyne.NewPos(30, 330))
 
-	btn0 := widget.NewButton("0", nil) // todo добавить pressed и исп те же функции?
-	btn1 := widget.NewButton("0", nil)
-	btn2 := widget.NewButton("0", nil)
-	btn3 := widget.NewButton("0", nil)
-	btn4 := widget.NewButton("0", nil)
+	var relay0, relay1, relay2, relay3, relay4 BTN
+	relaySlice := []*BTN{&relay0, &relay1, &relay2, &relay3, &relay4}
 
-	label := widget.NewLabel("")
+	// label := widget.NewLabel("") /// """"""""""""""""""""""""""
 	label0 := widget.NewLabel("0")
 	label1 := widget.NewLabel("1")
 	label2 := widget.NewLabel("2")
 	label3 := widget.NewLabel("3")
 	label4 := widget.NewLabel("4")
 
-	grid := container.NewGridWithColumns(
+	relayBox := container.NewGridWithColumns(
 		5,
 		label4, label3, label2, label1, label0,
-		btn4, btn3, btn2, btn1, btn0,
+		relay4.Draw(0x10, "4"), relay3.Draw(0x08, "3"), relay2.Draw(0x04, "2"), relay1.Draw(0x02, "1"), relay0.Draw(0x01, "0"),
 	)
 
 	btnStart := widget.NewButton("Старт", func() {
@@ -495,29 +491,73 @@ func checkRelayBlock() fyne.CanvasObject {
 	errorLabel.Move(fyne.NewPos(420, 330))
 	errorLabel.Hide()
 
-	box0 := container.NewWithoutLayout(basicLabel, selectbox, btnStart, errorLabel)
+	// box := container.NewWithoutLayout(basicLabel, selectbox, btnStart, errorLabel)
+
+	// проверка нажатых сегментов
+	go func() {
+		var pressedRelays int // все реле установленные в единицу
+		changedbit := false
+		for {
+			if gTabIndex == 2 {
+				// fmt.Println("tab 3: process")
+				for _, button := range relaySlice {
+					if button.pressed {
+						if (pressedRelays & button.number) != button.number {
+							pressedRelays |= button.number
+							changedbit = true
+						}
+					} else {
+						if (pressedRelays & button.number) == button.number {
+							pressedRelays &= ^button.number
+							changedbit = true
+						}
+					}
+					if changedbit {
+						changedbit = false
+						if setbits, err := com.CheckRelay(pressedRelays); err == nil {
+							button.CheckPressed(setbits)
+						} else {
+							// ошибка передачи COM
+						}
+					}
+				}
+			}
+			time.Sleep(100 * time.Millisecond) //200
+			runtime.Gosched()
+		}
+	}()
 
 	// автоматическая проверка
 	go func() {
 		for {
 			if (gTabIndex == 2) && autoCheck {
-				// fmt.Println("tab 3: auto check START")
+				fmt.Println("tab 3: auto check START")
 				btnStart.SetText("Стоп")
+				for _, button := range relaySlice {
+					button.pressed = false
+				}
 				for (gTabIndex == 2) && autoCheck {
-					// fmt.Println("tab 1: auto check")
-					for i := 0; autoCheck && (i <= 7); i++ {
-						//
+					fmt.Println("tab 3: auto check")
+
+					for _, button := range relaySlice {
+						button.pressed = true
 						time.Sleep(timeout)
+
+						for _, button := range relaySlice {
+							button.pressed = false
+						}
 					}
 				}
 				btnStart.SetText("Старт")
 			}
-			time.Sleep(300 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond)
 			runtime.Gosched()
 		}
 	}()
 
-	return container.NewVBox(box0, label, grid)
+	box := container.NewWithoutLayout(basicLabel, selectbox, btnStart, errorLabel)
+	return container.NewBorder(box, relayBox, nil, nil)
+
 }
 
 // ----------------------------------------------------------------------------- //
@@ -713,11 +753,11 @@ func (seg *SEG) Hide() {
 
 // BTN кнопка
 type BTN struct {
-	number  int
-	button  *widget.Button
-	rectHot *canvas.Rectangle //pressed? todo
-	rectErr *canvas.Rectangle
-	// showed  bool
+	number      int
+	button      *widget.Button
+	rectPressed *canvas.Rectangle
+	rectErr     *canvas.Rectangle
+	pressed     bool
 }
 
 // Draw отрисовка
@@ -726,16 +766,18 @@ type BTN struct {
 func (btn *BTN) Draw(number int, name string) *fyne.Container {
 
 	btn.number = number
-	btn.button = widget.NewButton(name, nil)
-	btn.rectHot = canvas.NewRectangle(colorBLUE)
+	btn.button = widget.NewButton(name, func() {
+		btn.pressed = !btn.pressed
+	})
+	btn.rectPressed = canvas.NewRectangle(colorBLUE)
 	btn.rectErr = canvas.NewRectangle(colorRED)
-	btn.rectHot.Hide()
-	btn.rectHot.Refresh()
+	btn.rectPressed.Hide()
+	btn.rectPressed.Refresh()
 	btn.rectErr.Hide()
 	btn.rectErr.Refresh()
 
 	box := container.NewPadded(
-		btn.rectHot, btn.rectErr, btn.button,
+		btn.rectPressed, btn.rectErr, btn.button,
 	)
 
 	return box
@@ -764,8 +806,8 @@ func (btn *BTN) ShowErr() {
 
 // Show отметить кнопку как нажатую
 func (btn *BTN) Show() {
-	btn.rectHot.Show()
-	btn.rectHot.Refresh()
+	btn.rectPressed.Show()
+	btn.rectPressed.Refresh()
 	btn.button.Refresh()
 }
 
@@ -774,8 +816,8 @@ func (btn *BTN) Hide() {
 	btn.rectErr.Hide()
 	btn.rectErr.Refresh()
 
-	btn.rectHot.Hide()
-	btn.rectHot.Refresh()
+	btn.rectPressed.Hide()
+	btn.rectPressed.Refresh()
 
 	btn.button.Refresh()
 }
