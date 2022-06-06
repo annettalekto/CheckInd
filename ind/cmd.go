@@ -14,26 +14,25 @@ import (
 
 // COM вот
 type COM struct {
-	process  bool
 	portName string
 	port     serial.Port
 	err      error
 }
 
 // Open открыть COM вот
-func (com *COM) Open() (err error) {
+func (com *COM) Open() error {
 	// Retrieve the port list
 	// ports, err := serial.GetPortsList()
-	ports, e := enumerator.GetDetailedPortsList()
-	if e != nil {
-		fmt.Println("COM GetDetailedPortsList(): ERROR")
-		com.err = e
-		return e
+	ports, err := enumerator.GetDetailedPortsList()
+	if err != nil {
+		fmt.Printf("COM GetDetailedPortsList(): %v\n", err)
+		com.err = errors.New("Ошибка COM: не получен список доступный COM-портов")
+		return com.err
 	}
 	if len(ports) == 0 {
-		fmt.Println("COM: Не найден ни один COM-порт")
-		com.err = errors.New("COM: Не найден ни один COM-порт")
-		return
+		fmt.Println("Ошибка COM: не найден ни один COM-порт")
+		com.err = errors.New("Ошибка COM: не найден ни один COM-порт")
+		return com.err
 	}
 
 	// Print the list of detected ports
@@ -44,7 +43,9 @@ func (com *COM) Open() (err error) {
 		}
 	}
 	if com.portName == "" {
-		return errors.New("COM: Не найден нужный COM-порт")
+		fmt.Printf("Ошибка COM: не найден нужный COM-порт")
+		com.err = errors.New("Ошибка COM: не найден нужный COM-порт")
+		return com.err
 	}
 
 	// Open the first serial port detected at 9600bps N81
@@ -58,72 +59,59 @@ func (com *COM) Open() (err error) {
 	com.port, err = serial.Open(com.portName, mode)
 	if err != nil {
 		// log.Fatal(err)
-		fmt.Printf("COM Open(): %e\n", err)
-		com.err = err
+		fmt.Printf("COM Open(): %v\n", err)
+		com.err = errors.New("Ошибка COM: ошибка открытия COM-порта")
+	} else {
+		com.err = nil
 	}
-	return
+	return com.err
 }
 
 // Close закрыть COM
 func (com *COM) Close() {
-	if com.err != nil || com.port == nil || com.portName == "" {
+	if nil == com.port {
 		return
 	}
 	com.port.Close()
 }
 
 // Cmd отправить команду в COM
-func (com *COM) Cmd(cmd string) (answer string, err error) {
-	if com.err != nil || com.port == nil || com.portName == "" {
-		err = errors.New("com == nil")
-		return
+func (com *COM) Cmd(cmd string) (string, error) {
+	if nil != com.err || nil == com.port || "" == com.portName {
+		return "", errors.New("Ошибка COM")
+	}
+	var answer string
+
+	if _, err := com.port.Write([]byte(cmd + "\n\r")); err != nil {
+		com.err = errors.New("Ошибка COM: ошибка записи данных")
+		fmt.Println(com.err)
+		return "", com.err
 	}
 
-	if !com.process {
-		com.process = true
-
-		_, err = com.port.Write([]byte(cmd + "\n\r"))
+	// Read and print the response
+	buff := make([]byte, 100)
+	start := time.Now()
+	for time.Since(start) <= (time.Second / 2) {
+		// Reads up to 100 bytes
+		n, err := com.port.Read(buff)
 		if err != nil {
-			err = errors.New("ошибка записи")
-			fmt.Println(err)
-			com.err = err
-			return
+			com.err = errors.New("Ошибка COM: ошибка чтения данных")
+			fmt.Println(com.err)
 		}
-		// fmt.Printf("Sent %v bytes\n", n)
-
-		// Read and print the response
-		buff := make([]byte, 100)
-		start := time.Now()
-		for time.Since(start) <= (time.Second / 2) { //todo ограничить время приема
-			// Reads up to 100 bytes
-			n, err := com.port.Read(buff)
-			if err != nil {
-				err = errors.New("ошибка чтения")
-				com.err = err
-				fmt.Println(err)
-			}
-			if n == 0 {
-				// fmt.Println("\nEOF")
-				break
-			}
-
-			// fmt.Printf("%s", string(buff[:n]))
-			answer += string(buff[:n])
-
-			// If we receive a newline stop reading
-			if strings.Contains(string(buff[:n]), "\n") {
-				break
-			}
+		if n == 0 {
+			break
 		}
-		fmt.Println("answer: " + answer)
 
-		com.process = false
-	} else {
-		err = errors.New("process")
-		fmt.Println("ERR PROCESS")
+		answer += string(buff[:n])
+
+		// If we receive a newline stop reading
+		if strings.Contains(string(buff[:n]), "\n") {
+			break
+		}
 	}
 
-	return
+	fmt.Printf("cmd: %s, answer: %s\n", cmd, answer)
+	return answer, com.err
 }
 
 // ----------------------------------------------------------------------------- //
@@ -133,16 +121,12 @@ func (com *COM) Cmd(cmd string) (answer string, err error) {
 // CheckInd проверить индикатор
 // cmd должен указать индикатор и сегменты, которые нужно "зажечь" на плате: w78=01
 func (com *COM) CheckInd(cmd string) (result bool, err error) {
-
 	var answer string
+
 	temp := strings.Split(cmd, "=")
 	numberInd := temp[0] // например "w7E"
 
-	answer, err = com.Cmd(cmd) // переименовать todo
-	// fmt.Println(answer)
-
-	if err != nil {
-		err = errors.New("ошибка передачи данных")
+	if answer, err = com.Cmd(cmd); err != nil {
 		return
 	}
 	if strings.Contains(answer, numberInd) && strings.Contains(answer, "\r\n") { // есть начало и конец строки
@@ -165,14 +149,9 @@ func (com *COM) CheckInd(cmd string) (result bool, err error) {
 func (com *COM) CheckButton() (btn int64, err error) {
 	var answer string
 
-	answer, err = com.Cmd("r70")
-	// fmt.Println(answer)
-
-	if err != nil {
-		err = errors.New("ошибка передачи данных")
+	if answer, err = com.Cmd("r70"); err != nil {
 		return
 	}
-
 	if strings.Contains(answer, "r70") && strings.Contains(answer, "\r\n") { // есть начало и конец строки
 		if strings.Contains(answer, "ERR") {
 			btn = -1
@@ -198,25 +177,21 @@ func (com *COM) CheckRelay(bits int) (setbits int64, err error) {
 	var answer string
 
 	// установить все нужные биты, например: w42=FF (первые биты лишние, таких реле нет на плате)
-	// прочитать установленные в единицу биты: r45=0F
+	// прочитать установленные в единицу биты: r45=0F (вернулись те 4, что есть на плате)
 
 	cmd := "w42=" + fmt.Sprintf("%X", bits)
-	fmt.Println("write: " + cmd)
-	answer, err = com.Cmd(cmd) // установка
-
+	answer, err = com.Cmd(cmd)
 	if err != nil || !strings.Contains(answer, "OK") {
-		err = errors.New("ошибка передачи данных")
 		return
 	}
 	time.Sleep(20 * time.Millisecond)
 
-	answer, err = com.Cmd("r45") // чтение
+	answer, err = com.Cmd("r45")
 	if err != nil {
-		err = errors.New("ошибка передачи данных")
 		return
 	}
 
-	if strings.Contains(answer, "r45") && strings.Contains(answer, "\r\n") { // есть начало и конец строки
+	if strings.Contains(answer, "r45") && strings.Contains(answer, "\r\n") {
 		if strings.Contains(answer, "ERR") {
 			setbits = -1
 		} else if strings.Contains(answer, "=") {
@@ -235,7 +210,7 @@ func (com *COM) CheckRelay(bits int) (setbits int64, err error) {
 }
 
 // IndsOff погасить все индикаторы
-func (com COM) IndsOff() (err error) {
+func (com *COM) IndsOff() (err error) {
 
 	_, err = com.Cmd("w78=0")
 	_, err = com.Cmd("w7A=0")

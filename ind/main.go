@@ -31,39 +31,45 @@ func main() {
 
 	a := app.New()
 	w := a.NewWindow("Программа тестирования БУ-3П")
-	w.Resize(fyne.NewSize(800, 555))
-	// w.SetFixedSize(true)
+	w.Resize(fyne.NewSize(800, 580))
+	// w.SetFixedSize(true) // перестает работать заплатка для меню от quit
 	w.CenterOnScreen()
 	w.SetMaster()
 
 	r, _ := LoadResourceFromPath("./icon.png")
 	w.SetIcon(r)
 
-	errcom := com.Open() // todo переинициализацию?
-	if errcom == nil {
-		defer com.Close()
-	}
+	com.Open()
+	go func() {
+		for {
+			if nil != com.err {
+				com.Close()
+				com.Open()
+			}
+			time.Sleep(1 * time.Second)
+		}
+	}()
+	defer com.Close()
+
 	com.IndsOff()
 
 	menu := fyne.NewMainMenu(
-		fyne.NewMenu("Файл"),
-		// a quit item will be appended to our first menu
-		// fyne.NewMenuItem("Выход (Alt+F4)", func() { a.Quit() }),
-
-		fyne.NewMenu("Опции",
-			// fyne.NewMenuItem("Параметры", nil),
+		fyne.NewMenu("Файл",
+			// a quit item will be appended to our first menu
 			fyne.NewMenuItem("Тема", func() { changeTheme(a) }),
+			// fyne.NewMenuItem("Выход (Alt+F4)", func() { a.Quit() }),
 		),
+
 		fyne.NewMenu("Справка",
 			fyne.NewMenuItem("Посмотреть справку", func() { aboutHelp() }),
-			fyne.NewMenuItemSeparator(),
+			// fyne.NewMenuItemSeparator(),
 			fyne.NewMenuItem("О программе", func() { abautProgramm() }),
 		),
 	)
 	w.SetMainMenu(menu)
 
 	go func() { // простите
-		time.Sleep(2 * time.Second)
+		time.Sleep(1 * time.Second)
 		for _, item := range menu.Items[0].Items {
 			if item.Label == "Quit" {
 				item.Label = "Выход (Alt+F4)"
@@ -82,17 +88,6 @@ func main() {
 	go func() {
 		for {
 			gTabIndex = tabs.CurrentTabIndex()
-			// fmt.Println("TAB: ", gTabIndex)
-
-			// version, err := com.Cmd("ver") // todo вывод ошибки, переинициализация COM
-			// if err != nil {
-			// 	com.err = err
-			// } else if strings.Contains(version, "Version") {
-			// 	com.err = nil
-			// } else {
-			// 	com.err = errors.New("нет ответа на запрос версии")
-			// }
-
 			time.Sleep(1000 * time.Millisecond)
 			// runtime.Gosched()
 		}
@@ -165,8 +160,14 @@ func checkMainInd() fyne.CanvasObject {
 	selectbox.Resize(fyne.NewSize(100, 40))
 	selectbox.Move(fyne.NewPos(30, 330))
 
-	btnStart := widget.NewButton("Старт", func() {
+	var btnStart *widget.Button
+	btnStart = widget.NewButton("Старт", func() {
 		autoCheck = !autoCheck
+		if autoCheck {
+			btnStart.SetText("Стоп")
+		} else {
+			btnStart.SetText("Старт")
+		}
 	})
 	btnStart.Resize(fyne.NewSize(100, 40))
 	btnStart.Move(fyne.NewPos(160, 330))
@@ -182,37 +183,16 @@ func checkMainInd() fyne.CanvasObject {
 
 	errorLabel := widget.NewLabel(fmt.Sprintf("%s: Нет ошибок соединения", com.portName))
 	errorLabel.Move(fyne.NewPos(420, 330))
-	errorLabel.Hide()
 
-	// отображение ошибок
-	go func() {
-		for {
-			if com.err != nil {
-				errorLabel.SetText(fmt.Sprintf("%s: %s", com.portName, com.err.Error()))
-				errorLabel.Show()
-			}
-			/*if _, err := com.Cmd("ver"); err != nil {
-				errorLabel.SetText(fmt.Sprintf("%s: %s", com.portName, err))
-				errorLabel.Show()
-			}*/
-			if com.err == nil {
-				errorLabel.Hide()
-			}
-			errorLabel.Refresh()
-			time.Sleep(1000 * time.Millisecond)
-		}
-	}()
-
-	// проверка нажатия
+	// проверка нажатия (запись в COM, отрисовка)
 	go func() {
 		for {
 			if gTabIndex == 0 {
-				// fmt.Println("tab 1: process")
 				ind1.CheckPressed()
 				ind2.CheckPressed()
 				ind3.CheckPressed()
 			}
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(200 * time.Millisecond)
 			runtime.Gosched()
 		}
 	}()
@@ -221,10 +201,7 @@ func checkMainInd() fyne.CanvasObject {
 	go func() {
 		for {
 			if (gTabIndex == 0) && autoCheck {
-				// fmt.Println("tab 1: auto check START")
-				btnStart.SetText("Стоп")
 				for (gTabIndex == 0) && autoCheck {
-					// fmt.Println("tab 1: auto check")
 					for i := 0; autoCheck && (i <= 7); i++ {
 						ind1.segments[i].pressed = true
 						ind2.segments[i].pressed = true
@@ -235,9 +212,25 @@ func checkMainInd() fyne.CanvasObject {
 						ind3.Reset()
 					}
 				}
-				btnStart.SetText("Старт")
 			}
 			time.Sleep(100 * time.Millisecond)
+			runtime.Gosched()
+		}
+	}()
+
+	// отображение ошибок
+	go func() {
+		for {
+			if gTabIndex == 0 {
+				if nil == com.err {
+					errorLabel.Hide()
+				} else {
+					errorLabel.SetText(fmt.Sprintf("%s", com.err.Error()))
+					errorLabel.Show()
+				}
+				errorLabel.Refresh()
+			}
+			time.Sleep(time.Second)
 			runtime.Gosched()
 		}
 	}()
@@ -299,41 +292,14 @@ func checkAddInd() fyne.CanvasObject {
 
 	errorLabel := widget.NewLabel(fmt.Sprintf("%s: Нет ошибок соединения", com.portName))
 	errorLabel.Move(fyne.NewPos(420, 330))
-	errorLabel.Hide()
 
-	indsBox := container.NewWithoutLayout(label, inds, selectbox, btnIndStart, btnIndReset)
-
-	// отображение ошибок
-	go func() {
-		for {
-			if com.err == nil {
-				errorLabel.Hide()
-			} else {
-				errorLabel.SetText(fmt.Sprintf("%s: %s", com.portName, com.err.Error()))
-				errorLabel.Show()
-			}
-			// if com.err != nil {
-			// 	errorLabel.SetText(fmt.Sprintf("%s: %s", com.portName, com.err.Error()))
-			// 	errorLabel.Show()
-			// } else if _, err := com.Cmd("ver"); err != nil {
-			// 	errorLabel.SetText(fmt.Sprintf("%s: %s", com.portName, err))
-			// 	errorLabel.Show()
-			// } else if com.err == nil {
-			// 	errorLabel.Hide()
-			// }
-			errorLabel.Refresh()
-			time.Sleep(time.Second)
-			// runtime.Gosched()
-		}
-	}()
+	indsBox := container.NewWithoutLayout(label, inds, selectbox, btnIndStart, btnIndReset, errorLabel)
 
 	// автоматическая проверка индикаторов
 	go func() {
 		for {
 			if (gTabIndex == 1) && autoIndTest {
-				// btnIndStart.SetText("Стоп")
 				for (gTabIndex == 1) && autoIndTest {
-					// fmt.Println("tab 2: auto check")
 					for i := 0; autoIndTest && (i <= 7); i++ {
 						ind1.segments[i].pressed = true
 						ind2.segments[i].pressed = true
@@ -352,6 +318,10 @@ func checkAddInd() fyne.CanvasObject {
 		}
 	}()
 
+	// Кнопки
+	voidLabel := widget.NewLabel("")
+	voidLabel.Hide()
+
 	var btnLight, btnP, btnT, btnContr, btnH, btnMin, btnBright BTN
 	buttonsBox := container.NewGridWithColumns(
 		7,
@@ -362,18 +332,18 @@ func checkAddInd() fyne.CanvasObject {
 		btnH.Draw(0x10, "Ч"),
 		btnMin.Draw(0x20, "Мин"),
 		btnBright.Draw(0x40, "Ярк"),
+		container.NewWithoutLayout(voidLabel),
 	)
 
 	// проверка нажатых элементов (запись в COM, отрисовка)
 	go func() {
 		for {
 			if gTabIndex == 1 {
-				// fmt.Println("tab 2: process")
 				ind1.CheckPressed()
 				ind2.CheckPressed()
 				ind3.CheckPressed()
 				ind4.CheckPressed()
-				// fmt.Println("tab 2: buttons")
+
 				number, _ := com.CheckButton()
 				btnLight.CheckPressed(number)
 				btnP.CheckPressed(number)
@@ -384,6 +354,23 @@ func checkAddInd() fyne.CanvasObject {
 				btnBright.CheckPressed(number)
 			}
 			time.Sleep(200 * time.Millisecond)
+			runtime.Gosched()
+		}
+	}()
+
+	// отображение ошибок
+	go func() {
+		for {
+			if gTabIndex == 1 {
+				if nil == com.err {
+					errorLabel.Hide()
+				} else {
+					errorLabel.SetText(fmt.Sprintf("%s", com.err.Error()))
+					errorLabel.Show()
+				}
+				errorLabel.Refresh()
+			}
+			time.Sleep(time.Second)
 			runtime.Gosched()
 		}
 	}()
@@ -441,7 +428,7 @@ func checkRelayBlock() fyne.CanvasObject {
 	btnStart.Move(fyne.NewPos(160, 330))
 
 	errorLabel := widget.NewLabel(fmt.Sprintf("%s: Нет ошибок соединения", com.portName))
-	errorLabel.Move(fyne.NewPos(420, 330))
+	errorLabel.Move(fyne.NewPos(300, 330))
 	errorLabel.Hide()
 
 	// проверка нажатых сегментов (запись в COM, отрисовка)
@@ -484,7 +471,7 @@ func checkRelayBlock() fyne.CanvasObject {
 			if (gTabIndex == 2) && autoCheck {
 				// fmt.Println("tab 3: auto check START")
 				btnStart.SetText("Стоп")
-				for _, button := range relaySlice {
+				for _, button := range relaySlice { // если натыкали ручками убирам
 					button.pressed = false
 				}
 				for (gTabIndex == 2) && autoCheck {
@@ -497,6 +484,9 @@ func checkRelayBlock() fyne.CanvasObject {
 						for _, button := range relaySlice {
 							button.pressed = false
 						}
+						if !autoCheck {
+							break
+						}
 					}
 				}
 				btnStart.SetText("Старт")
@@ -506,10 +496,27 @@ func checkRelayBlock() fyne.CanvasObject {
 		}
 	}()
 
+	// отображение ошибок
+	go func() {
+		for {
+			if gTabIndex == 2 {
+				if nil == com.err {
+					errorLabel.Hide()
+				} else {
+					errorLabel.SetText(fmt.Sprintf("%s", com.err.Error()))
+					errorLabel.Show()
+				}
+				errorLabel.Refresh()
+			}
+			time.Sleep(time.Second)
+			runtime.Gosched()
+		}
+	}()
+
 	voidLabel := widget.NewLabel("")
 
 	box := container.NewWithoutLayout(basicLabel, selectbox, btnStart, errorLabel)
-	return container.NewVBox(box, voidLabel, voidLabel, relayBox) // не понятно как делать разметку, использую пустой лейбл чтобы опустить контейнер ниже
+	return container.NewVBox(box, voidLabel, voidLabel, voidLabel, voidLabel, relayBox) // не понятно как делать разметку, использую пустой лейбл чтобы опустить контейнер ниже
 }
 
 // ----------------------------------------------------------------------------- //
@@ -552,7 +559,7 @@ func (ind *IND) Hide() {
 }
 
 // LightSegments зажечь выбранные(litSegments) сегменты не плате
-func (ind *IND) LightSegments(com COM) (ok bool, err error) {
+func (ind *IND) LightSegments() (ok bool, err error) {
 
 	cmd := "w" + fmt.Sprintf("%X=", ind.number) + fmt.Sprintf("%X", ind.litSegments) // w78=01
 	ok, err = com.CheckInd(cmd)
@@ -577,7 +584,7 @@ func (ind *IND) CheckPressed() error {
 			if (ind.litSegments & seg) != seg {
 
 				ind.litSegments |= seg
-				if ok, err := ind.LightSegments(com); err == nil {
+				if ok, err := ind.LightSegments(); err == nil {
 					if ok {
 						ind.segments[i].ShowGreen()
 					} else if !ok {
@@ -588,7 +595,7 @@ func (ind *IND) CheckPressed() error {
 		} else {
 			if (ind.litSegments & seg) == seg {
 				ind.litSegments &= ^seg
-				ind.LightSegments(com)
+				ind.LightSegments()
 				ind.segments[i].Hide()
 			}
 		}
