@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"os/exec"
 	"runtime"
+	"strings"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -30,14 +31,18 @@ func main() {
 	fmt.Println("Start")
 
 	a := app.New()
-	w := a.NewWindow("Программа тестирования БУ-3П")
+	w := a.NewWindow("Программа проверки индикаторов")
 	w.Resize(fyne.NewSize(800, 580))
 	// w.SetFixedSize(true) // перестает работать заплатка для меню от quit
 	w.CenterOnScreen()
 	w.SetMaster()
 
-	r, _ := LoadResourceFromPath("./icon.png")
-	w.SetIcon(r)
+	// r, _ := LoadResourceFromPath("./icon.png")
+	// ic, _ := fyne.LoadResourceFromPath("icon.png")
+	// w.SetIcon(ic)
+	// иконка устанавливается при формировании пакета:
+	// fyne package
+	// fyne install -icon Icon.png
 
 	com.Open()
 	go func() {
@@ -81,6 +86,7 @@ func main() {
 		container.NewTabItem("Осн. индикатор", checkMainInd()),
 		container.NewTabItem("Доп. индикатор", checkAddInd()),
 		container.NewTabItem("Блок реле ", checkRelayBlock()),
+		container.NewTabItem("Инфо ", printfInfo()),
 	)
 	// tabs.SetTabLocation(container.TabLocationTop)
 	tabs.SetTabLocation(container.TabLocationBottom)
@@ -184,6 +190,10 @@ func checkMainInd() fyne.CanvasObject {
 	errorLabel := widget.NewLabel(fmt.Sprintf("%s: Нет ошибок соединения", com.portName))
 	errorLabel.Move(fyne.NewPos(420, 330))
 
+	version := "номер версии не получен"
+	versionLabel := widget.NewLabel("")
+	versionLabel.Move(fyne.NewPos(20, 450))
+
 	// проверка нажатия (запись в COM, отрисовка)
 	go func() {
 		for {
@@ -191,6 +201,7 @@ func checkMainInd() fyne.CanvasObject {
 				ind1.CheckPressed()
 				ind2.CheckPressed()
 				ind3.CheckPressed()
+				version, _ = com.Cmd("ver")
 			}
 			time.Sleep(200 * time.Millisecond)
 			runtime.Gosched()
@@ -218,10 +229,18 @@ func checkMainInd() fyne.CanvasObject {
 		}
 	}()
 
-	// отображение ошибок
+	// отображение ошибок и версии
 	go func() {
 		for {
 			if gTabIndex == 0 {
+				if "" == version {
+					versionLabel.SetText("Номер версии не получен") // добавить красный/зеленый кружочек?
+				} else {
+					ver := strings.Trim(version, "Version ")
+					versionLabel.SetText("Версия программы платы интерфейсной " + ver)
+				}
+				versionLabel.Refresh()
+
 				if nil == com.err {
 					errorLabel.Hide()
 				} else {
@@ -235,7 +254,7 @@ func checkMainInd() fyne.CanvasObject {
 		}
 	}()
 
-	return container.NewWithoutLayout(label, inds, selectbox, btnStart, btnReset, errorLabel)
+	return container.NewWithoutLayout(label, inds, selectbox, btnStart, btnReset, errorLabel, versionLabel)
 }
 
 // ----------------------------------------------------------------------------- //
@@ -517,6 +536,62 @@ func checkRelayBlock() fyne.CanvasObject {
 
 	box := container.NewWithoutLayout(basicLabel, selectbox, btnStart, errorLabel)
 	return container.NewVBox(box, voidLabel, voidLabel, voidLabel, voidLabel, relayBox) // не понятно как делать разметку, использую пустой лейбл чтобы опустить контейнер ниже
+}
+
+// ----------------------------------------------------------------------------- //
+//							 Таб4:	Информация		 							 //
+// ----------------------------------------------------------------------------- //
+
+func printfInfo() fyne.CanvasObject {
+
+	title := canvas.NewText("Инфо", color.Black)
+	title.TextSize = 20
+	title.Move(fyne.NewPos(20, 20))
+
+	version := "номер версии не получен"
+	versionLabel := widget.NewLabel("")
+	versionLabel.Move(fyne.NewPos(20, 50))
+
+	errorLabel := widget.NewLabel(fmt.Sprintf("%s: Нет ошибок соединения", com.portName))
+	errorLabel.Move(fyne.NewPos(20, 100))
+
+	// проверка нажатия (запись в COM, отрисовка)
+	go func() {
+		for {
+			if gTabIndex == 3 {
+				version, _ = com.Cmd("ver")
+			}
+			time.Sleep(300 * time.Millisecond)
+			runtime.Gosched()
+		}
+	}()
+
+	// отображение ошибок и версии
+	go func() {
+		for {
+			if gTabIndex == 3 {
+				if "" == version {
+					versionLabel.SetText("Номер версии не получен") // добавить красный/зеленый кружочек?
+				} else {
+					ver := strings.Trim(version, "Version ")
+					versionLabel.SetText("Версия программы платы интерфейсной " + ver)
+				}
+				versionLabel.Refresh()
+
+				if nil == com.err {
+					// errorLabel.Hide()
+				} else {
+					errorLabel.SetText(fmt.Sprintf("%s", com.err.Error()))
+					// errorLabel.Show()
+				}
+				errorLabel.Refresh()
+			}
+			time.Sleep(time.Second)
+			runtime.Gosched()
+		}
+	}()
+
+	return container.NewWithoutLayout(title, errorLabel, versionLabel)
 }
 
 // ----------------------------------------------------------------------------- //
