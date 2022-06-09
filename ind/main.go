@@ -18,6 +18,7 @@ import (
 )
 
 var com COM
+var gVersion, gYear string
 var gTabIndex int
 
 var colorRED = color.NRGBA{R: 214, G: 55, B: 55, A: 255}
@@ -28,7 +29,7 @@ var colorCream = color.NRGBA{R: 255, G: 0xFD, B: 0xD0, A: 0xFF}
 var colorGray = color.NRGBA{R: 0x7C, G: 0x7C, B: 0x7C, A: 0xFF}
 
 func main() {
-	fmt.Println("Start")
+	gVersion, gYear = "1.0.0", "2022 г." // todo править при изменениях
 
 	a := app.New()
 	w := a.NewWindow("Программа проверки индикаторов")
@@ -36,13 +37,6 @@ func main() {
 	// w.SetFixedSize(true) // перестает работать заплатка для меню от quit
 	w.CenterOnScreen()
 	w.SetMaster()
-
-	// r, _ := LoadResourceFromPath("./icon.png")
-	// ic, _ := fyne.LoadResourceFromPath("icon.png")
-	// w.SetIcon(ic)
-	// иконка устанавливается при формировании пакета:
-	// fyne package
-	// fyne install -icon Icon.png
 
 	com.Open()
 	go func() {
@@ -122,7 +116,7 @@ func aboutHelp() {
 	}
 }
 
-func abautProgramm() { // можно просто Info
+func abautProgramm() {
 	w := fyne.CurrentApp().NewWindow("О программе") // CurrentApp!
 	w.Resize(fyne.NewSize(400, 200))
 	w.CenterOnScreen()
@@ -130,9 +124,8 @@ func abautProgramm() { // можно просто Info
 	l0 := canvas.NewText("Программа проверки индикаторов", color.Black)
 	l0.TextSize = 16
 	l0.Move(fyne.NewPos(20, 20))
-	l1 := canvas.NewText("Версия 1", color.Black)
-	l0.TextSize = 14
-	l2 := canvas.NewText("© 2022 ПАО «Электромеханика»", color.Black)
+	l1 := widget.NewLabel(fmt.Sprintf("Версия %s", gVersion))
+	l2 := widget.NewLabel(fmt.Sprintf("© ПАО «Электромеханика», %s", gYear))
 	text := container.NewVBox(l0, l1, l2)
 	w.SetContent(fyne.NewContainerWithLayout(layout.NewCenterLayout(), text))
 	w.Show() // ShowAndRun -- panic!
@@ -190,10 +183,6 @@ func checkMainInd() fyne.CanvasObject {
 	errorLabel := widget.NewLabel(fmt.Sprintf("%s: Нет ошибок соединения", com.portName))
 	errorLabel.Move(fyne.NewPos(420, 330))
 
-	version := "номер версии не получен"
-	versionLabel := widget.NewLabel("")
-	versionLabel.Move(fyne.NewPos(20, 450))
-
 	// проверка нажатия (запись в COM, отрисовка)
 	go func() {
 		for {
@@ -201,7 +190,7 @@ func checkMainInd() fyne.CanvasObject {
 				ind1.CheckPressed()
 				ind2.CheckPressed()
 				ind3.CheckPressed()
-				version, _ = com.Cmd("ver")
+				com.Cmd("ver")
 			}
 			time.Sleep(200 * time.Millisecond)
 			runtime.Gosched()
@@ -229,18 +218,10 @@ func checkMainInd() fyne.CanvasObject {
 		}
 	}()
 
-	// отображение ошибок и версии
+	// отображение ошибок
 	go func() {
 		for {
 			if gTabIndex == 0 {
-				if "" == version {
-					versionLabel.SetText("Номер версии не получен") // добавить красный/зеленый кружочек?
-				} else {
-					ver := strings.Trim(version, "Version ")
-					versionLabel.SetText("Версия программы платы интерфейсной " + ver)
-				}
-				versionLabel.Refresh()
-
 				if nil == com.err {
 					errorLabel.Hide()
 				} else {
@@ -254,7 +235,7 @@ func checkMainInd() fyne.CanvasObject {
 		}
 	}()
 
-	return container.NewWithoutLayout(label, inds, selectbox, btnStart, btnReset, errorLabel, versionLabel)
+	return container.NewWithoutLayout(label, inds, selectbox, btnStart, btnReset, errorLabel)
 }
 
 // ----------------------------------------------------------------------------- //
@@ -543,25 +524,25 @@ func checkRelayBlock() fyne.CanvasObject {
 // ----------------------------------------------------------------------------- //
 
 func printfInfo() fyne.CanvasObject {
+	versionPBI := "номер версии не получен" //Версия программы платы интерфейсной
 
-	title := canvas.NewText("Инфо", color.Black)
+	title := canvas.NewText("Информация", color.Black)
 	title.TextSize = 20
 	title.Move(fyne.NewPos(20, 20))
 
-	version := "номер версии не получен"
-	versionLabel := widget.NewLabel("")
-	versionLabel.Move(fyne.NewPos(20, 50))
+	label := widget.NewLabel("")
+	versionLabel := widget.NewLabel("Версия программы: " + gVersion)
+	comLabel := widget.NewLabel("")
+	versionPBILabel := widget.NewLabel("")
 
-	errorLabel := widget.NewLabel(fmt.Sprintf("%s: Нет ошибок соединения", com.portName))
-	errorLabel.Move(fyne.NewPos(20, 100))
+	box := container.NewVBox(label, label, versionLabel, comLabel, versionPBILabel)
 
-	// проверка нажатия (запись в COM, отрисовка)
 	go func() {
 		for {
 			if gTabIndex == 3 {
-				version, _ = com.Cmd("ver")
+				versionPBI, _ = com.Cmd("ver")
 			}
-			time.Sleep(300 * time.Millisecond)
+			time.Sleep(500 * time.Millisecond)
 			runtime.Gosched()
 		}
 	}()
@@ -570,28 +551,28 @@ func printfInfo() fyne.CanvasObject {
 	go func() {
 		for {
 			if gTabIndex == 3 {
-				if "" == version {
-					versionLabel.SetText("Номер версии не получен") // добавить красный/зеленый кружочек?
+				if "" == versionPBI || !strings.Contains(versionPBI, "Version") {
+					versionPBILabel.SetText("Ошибка получения версии программы платы интерфейсной")
 				} else {
-					ver := strings.Trim(version, "Version ")
-					versionLabel.SetText("Версия программы платы интерфейсной " + ver)
+					ver := strings.Trim(versionPBI, "Version ")
+					versionPBILabel.SetText("Версия программы платы интерфейсной: " + ver)
 				}
-				versionLabel.Refresh()
+				versionPBILabel.Refresh()
 
 				if nil == com.err {
-					// errorLabel.Hide()
+					comLabel.SetText(fmt.Sprintf("Соединение установлено: %s", com.portName))
 				} else {
-					errorLabel.SetText(fmt.Sprintf("%s", com.err.Error()))
+					comLabel.SetText(fmt.Sprintf("%s", com.err.Error()))
 					// errorLabel.Show()
 				}
-				errorLabel.Refresh()
+				comLabel.Refresh()
 			}
 			time.Sleep(time.Second)
 			runtime.Gosched()
 		}
 	}()
 
-	return container.NewWithoutLayout(title, errorLabel, versionLabel)
+	return container.NewWithoutLayout(title, box)
 }
 
 // ----------------------------------------------------------------------------- //
