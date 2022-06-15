@@ -180,10 +180,8 @@ func (com *COM) CheckRelay(bits int) (setbits int64, err error) {
 	// прочитать установленные в единицу биты: r45=0F (вернулись те 4, что есть на плате)
 
 	cmd := "w42=" + fmt.Sprintf("%X", bits)
-	answer, err = com.Cmd(cmd)
-	if err != nil || !strings.Contains(answer, "OK") {
-		return
-	}
+	//answer, err =
+	com.Cmd(cmd)
 	time.Sleep(20 * time.Millisecond)
 
 	answer, err = com.Cmd("r45")

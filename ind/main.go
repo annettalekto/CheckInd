@@ -155,9 +155,9 @@ func checkMainInd() fyne.CanvasObject {
 
 	var ind1, ind2, ind3 IND
 	inds := container.NewHBox(
-		ind1.Draw(0x7E, 30, 80), // todo задать свои адреса
-		ind2.Draw(0x7C, 190, 80),
-		ind3.Draw(0x7A, 350, 80), // отключен на отладочной плате
+		ind1.Draw(0x72, 30, 80),
+		ind2.Draw(0x74, 190, 80),
+		ind3.Draw(0x76, 350, 80),
 	)
 
 	times := []string{"0.5", "1", "2", "5"}
