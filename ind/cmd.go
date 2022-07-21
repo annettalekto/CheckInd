@@ -14,9 +14,10 @@ import (
 
 // COM вот
 type COM struct {
-	portName string
-	port     serial.Port
-	err      error
+	portName  string
+	port      serial.Port
+	available []string
+	err       error
 }
 
 // Open открыть COM вот
@@ -36,12 +37,15 @@ func (com *COM) Open() error {
 	}
 
 	// Print the list of detected ports
+	var temp []string
 	for _, p := range ports {
 		fmt.Printf("Found port: %v\n", p.Product)
+		temp = append(temp, p.Name)
 		if strings.Contains(p.Product, "STMicroelectronics") {
 			com.portName = p.Name
 		}
 	}
+	com.available = temp
 	if com.portName == "" {
 		fmt.Printf("Ошибка COM: не найден нужный COM-порт")
 		com.err = errors.New("Ошибка COM: не найден нужный COM-порт")
@@ -56,14 +60,66 @@ func (com *COM) Open() error {
 		DataBits: 8,
 		StopBits: serial.OneStopBit,
 	}
+
 	com.port, err = serial.Open(com.portName, mode)
 	if err != nil {
-		// log.Fatal(err)
 		fmt.Printf("COM Open(): %v\n", err)
 		com.err = errors.New("Ошибка COM: ошибка открытия COM-порта")
 	} else {
 		com.err = nil
 	}
+	return com.err
+}
+
+// OpenOne открыть COM вот
+func (com *COM) OpenOne(sCOM string) error {
+	var err error
+
+	// Open the first serial port detected at 9600bps N81
+	mode := &serial.Mode{
+		// BaudRate: 19200,
+		BaudRate: 115200,
+		Parity:   serial.NoParity,
+		DataBits: 8,
+		StopBits: serial.OneStopBit,
+	}
+
+	com.portName = sCOM
+	com.port, err = serial.Open(com.portName, mode)
+	if err != nil {
+		fmt.Printf("COM Open(): %v\n", err)
+		com.err = errors.New("Ошибка COM: ошибка открытия COM-порта")
+	} else {
+		com.err = nil
+	}
+	return com.err
+}
+
+// PortSearch найти порты
+func (com *COM) PortSearch() error {
+	// Retrieve the port list
+	ports, err := enumerator.GetDetailedPortsList()
+	if err != nil {
+		fmt.Printf("COM GetDetailedPortsList(): %v\n", err)
+		com.err = errors.New("Ошибка COM: не получен список доступный COM-портов")
+		com.available = nil
+		return com.err
+	}
+	if len(ports) == 0 {
+		fmt.Println("Ошибка COM: не найден ни один COM-порт")
+		com.err = errors.New("Ошибка COM: не найден ни один COM-порт")
+		com.available = nil
+		return com.err
+	}
+
+	// Print the list of detected ports
+	var temp []string
+	for _, p := range ports {
+		fmt.Printf("Found port: %v\n", p.Product)
+		temp = append(temp, p.Name)
+	}
+	com.available = temp
+
 	return com.err
 }
 

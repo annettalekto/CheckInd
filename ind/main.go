@@ -17,7 +17,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-var com COM
+var com COM // подключенный
 var gVersion, gYear string
 var gTabIndex int
 
@@ -193,13 +193,18 @@ func checkMainInd() fyne.CanvasObject {
 	errorLabel.Move(fyne.NewPos(420, 330))
 
 	// проверка нажатия (запись в COM, отрисовка)
+	var strGetDataError string
 	go func() {
 		for {
 			if gTabIndex == 0 {
 				ind1.CheckPressed()
 				ind2.CheckPressed()
 				ind3.CheckPressed()
-				com.Cmd("ver")
+				if v, err := com.Cmd("ver"); err != nil || !strings.Contains(v, "Version") {
+					strGetDataError = fmt.Sprintf("Корректные данные не получены (%s)", com.portName)
+				} else {
+					strGetDataError = ""
+				}
 			}
 			time.Sleep(200 * time.Millisecond)
 			runtime.Gosched()
@@ -232,7 +237,12 @@ func checkMainInd() fyne.CanvasObject {
 		for {
 			if gTabIndex == 0 {
 				if nil == com.err {
-					errorLabel.Hide()
+					if strGetDataError != "" {
+						errorLabel.SetText(strGetDataError)
+						errorLabel.Show()
+					} else {
+						errorLabel.Hide()
+					}
 				} else {
 					errorLabel.SetText(fmt.Sprintf("%s", com.err.Error()))
 					errorLabel.Show()
@@ -534,17 +544,27 @@ func checkRelayBlock() fyne.CanvasObject {
 
 func printfInfo() fyne.CanvasObject {
 	versionPBI := "номер версии не получен" //Версия программы платы интерфейсной
+	// var manuallySelectedCOM string
 
 	title := canvas.NewText("Информация", color.Black)
 	title.TextSize = 20
 	title.Move(fyne.NewPos(20, 20))
 
-	label := widget.NewLabel("")
+	voidLabel := widget.NewLabel("")
 	versionLabel := widget.NewLabel("Версия программы: " + gVersion)
-	comLabel := widget.NewLabel("")
 	versionPBILabel := widget.NewLabel("")
+	comLabel := widget.NewLabel("")
 
-	box := container.NewVBox(label, label, versionLabel, comLabel, versionPBILabel)
+	var comSelect *widget.Select
+	comSelect = widget.NewSelect(com.available, nil)
+	comSelect.PlaceHolder = "авто"
+	comSelect.OnChanged = func(str string) {
+		com.Close()
+		com.OpenOne(str)
+	}
+	boxSelect := container.NewHBox(widget.NewLabel("Подключить COM-порт: "), comSelect)
+
+	box := container.NewVBox(voidLabel, voidLabel, versionLabel, versionPBILabel, comLabel, boxSelect)
 
 	go func() {
 		for {
@@ -564,6 +584,7 @@ func printfInfo() fyne.CanvasObject {
 					versionPBILabel.SetText("Ошибка получения версии программы платы интерфейсной")
 				} else {
 					ver := strings.Trim(versionPBI, "Version ")
+					ver = strings.Trim(ver, "\r\n")
 					versionPBILabel.SetText("Версия программы платы интерфейсной: " + ver)
 				}
 				versionPBILabel.Refresh()
@@ -575,6 +596,11 @@ func printfInfo() fyne.CanvasObject {
 					// errorLabel.Show()
 				}
 				comLabel.Refresh()
+
+				com.PortSearch()
+				comSelect.Options = com.available
+				// comSelect = widget.NewSelect(com.available, nil) // не обновляет список + не вызывается обработчик
+				// comSelect.Refresh() // не обновляет список
 			}
 			time.Sleep(time.Second)
 			runtime.Gosched()
