@@ -1,4 +1,4 @@
 # CheckInd
-<img src="ind/help/tab1.JPG" alt="screen"/>
+<img src="ind/help/tab2.JPG" alt="screen"/>
 Program for checking the indicator board.
 
