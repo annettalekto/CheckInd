@@ -1,0 +1,11 @@
+*.exe
+*.txt
+*.png
+*.ico
+
+#*.toml
+upp.toml
+
+toml/
+.svn/
+.vscode/
