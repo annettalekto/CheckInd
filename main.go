@@ -3,8 +3,10 @@ package main
 import (
 	"fmt"
 	"image/color"
+	"os"
 	"os/exec"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -17,8 +19,8 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
+var config configType
 var com COM // подключенный
-var gVersion, gYear string
 var gTabIndex int
 
 var colorRED = color.NRGBA{R: 214, G: 55, B: 55, A: 255}
@@ -29,14 +31,30 @@ var colorCream = color.NRGBA{R: 255, G: 0xFD, B: 0xD0, A: 0xFF}
 var colorGray = color.NRGBA{R: 0x7C, G: 0x7C, B: 0x7C, A: 0xFF}
 
 func main() {
-	gVersion, gYear = "1.0.0", "2022 г." // todo править при изменениях
+	config = getFyneAPP()
+
+	defer func() {
+		if r := recover(); r != nil {
+			debug.PrintStack()
+			fmt.Println("PANIC!")
+			os.Exit(1)
+		}
+	}()
 
 	a := app.New()
-	w := a.NewWindow("Программа проверки индикаторов")
+	w := a.NewWindow(config.ProgramName)
 	w.Resize(fyne.NewSize(800, 580))
 	// w.SetFixedSize(true) // перестает работать заплатка для меню от quit
+	ic, _ := fyne.LoadResourceFromPath(config.Icon)
+	w.SetIcon(ic)
 	w.CenterOnScreen()
 	w.SetMaster()
+
+	if config.Theme == "dark" {
+		a.Settings().SetTheme(theme.DarkTheme())
+	} else {
+		a.Settings().SetTheme(theme.LightTheme())
+	}
 
 	com.Open()
 	go func() {
@@ -54,9 +72,7 @@ func main() {
 
 	menu := fyne.NewMainMenu(
 		fyne.NewMenu("Файл",
-			// a quit item will be appended to our first menu
-			fyne.NewMenuItem("Тема", func() { changeTheme(a) }),
-			// fyne.NewMenuItem("Выход", func() { a.Quit() }),
+			fyne.NewMenuItem("Тема", func() { changeTheme() }),
 		),
 
 		fyne.NewMenu("Справка",
@@ -82,7 +98,6 @@ func main() {
 		container.NewTabItem("Блок реле ", checkRelayBlock()),
 		container.NewTabItem("Инфо ", printfInfo()),
 	)
-	// tabs.SetTabLocation(container.TabLocationTop)
 	tabs.SetTabLocation(container.TabLocationBottom)
 
 	go func() {
@@ -97,16 +112,21 @@ func main() {
 	w.ShowAndRun()
 }
 
-var currentTheme bool // светлая тема false
+// сменить тему
+func changeTheme() {
 
-func changeTheme(a fyne.App) {
-	currentTheme = !currentTheme
-
-	if currentTheme {
-		a.Settings().SetTheme(theme.DarkTheme())
-	} else {
-		a.Settings().SetTheme(theme.LightTheme())
+	switch config.Theme {
+	case "light":
+		fyne.CurrentApp().Settings().SetTheme(theme.DarkTheme())
+		config.Theme = "dark"
+	case "dark":
+		fyne.CurrentApp().Settings().SetTheme(theme.LightTheme())
+		config.Theme = "light"
+	default:
+		fyne.CurrentApp().Settings().SetTheme(theme.LightTheme())
+		config.Theme = "light"
 	}
+	writeFyneAPP(config)
 }
 
 func aboutHelp() {
@@ -122,22 +142,30 @@ func abautProgramm() {
 	w.SetFixedSize(true)
 	w.CenterOnScreen()
 
-	img := canvas.NewImageFromURI(storage.NewFileURI("ind.png"))
+	img := canvas.NewImageFromURI(storage.NewFileURI("Logo.png"))
 	img.Resize(fyne.NewSize(66, 90)) //без изменений
 	img.Move(fyne.NewPos(10, 10))
 
-	l0 := widget.NewLabel("Программа проверки индикаторов")
+	l0 := widget.NewLabel(config.ProgramName)
 	l0.Move(fyne.NewPos(80, 10))
-	l1 := widget.NewLabel(fmt.Sprintf("Версия %s", gVersion))
+	l1 := widget.NewLabel(fmt.Sprintf("Версия %s.%d", config.Version, config.Build))
 	l1.Move(fyne.NewPos(80, 40))
-	l2 := widget.NewLabel(fmt.Sprintf("© ПАО «Электромеханика», %s", gYear))
+	l2 := widget.NewLabel(fmt.Sprintf("© ПАО «Электромеханика», %s", config.Year))
 	l2.Move(fyne.NewPos(80, 70))
 
 	box := container.NewWithoutLayout(img, l0, l1, l2)
 
-	// w.SetContent(fyne.NewContainerWithLayout(layout.NewCenterLayout(), box))
 	w.SetContent(box)
 	w.Show() // ShowAndRun -- panic!
+}
+
+func getTitle(str string) *widget.Label {
+	var style fyne.TextStyle
+	// style.Bold = true
+	// style.Monospace = true
+	// fyne.MeasureText(str, 30, style)
+
+	return widget.NewLabelWithStyle(str, fyne.TextAlignCenter, style)
 }
 
 // ----------------------------------------------------------------------------- //
@@ -149,7 +177,7 @@ func checkMainInd() fyne.CanvasObject {
 	var autoCheck bool
 	var timeout time.Duration // частота автоматической проверки
 
-	label := canvas.NewText("Основной индикатор", color.Black)
+	label := canvas.NewText("Дополнительный индикатор", color.Black)
 	label.TextSize = 20
 	label.Move(fyne.NewPos(20, 20))
 
@@ -551,7 +579,8 @@ func printfInfo() fyne.CanvasObject {
 	title.Move(fyne.NewPos(20, 20))
 
 	voidLabel := widget.NewLabel("")
-	versionLabel := widget.NewLabel("Версия программы: " + gVersion)
+	versionLabel := widget.NewLabel(fmt.Sprintf("Версия %s.%d", config.Version, config.Build))
+
 	versionPBILabel := widget.NewLabel("")
 	comLabel := widget.NewLabel("")
 
@@ -622,7 +651,8 @@ type IND struct {
 }
 
 // Draw отрисовка
-//  x, y - смещение индикатора относительно
+//
+//	x, y - смещение индикатора относительно
 func (ind *IND) Draw(number int, x, y float32) *fyne.Container {
 	ind.number = number
 

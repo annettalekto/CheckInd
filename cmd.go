@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	// "go.bug.st/serial" // работает, но нет полного имени COM (Product)
 	"go.bug.st/serial"
 	"go.bug.st/serial/enumerator"
 )
@@ -22,6 +21,14 @@ type COM struct {
 
 // Open открыть COM вот
 func (com *COM) Open() error {
+
+	// пробуем открыть COM сохранееный в config
+	if "" != config.ComPortName {
+		if err := com.OpenOne(config.ComPortName); err == nil {
+			return nil
+		}
+	}
+
 	// Retrieve the port list
 	// ports, err := serial.GetPortsList()
 	ports, err := enumerator.GetDetailedPortsList()
@@ -36,7 +43,7 @@ func (com *COM) Open() error {
 		return com.err
 	}
 
-	// Print the list of detected ports
+	// ищем наш адаптер
 	var temp []string
 	for _, p := range ports {
 		fmt.Printf("Found port: %v\n", p.Product)
@@ -67,6 +74,8 @@ func (com *COM) Open() error {
 		com.err = errors.New("Ошибка COM: ошибка открытия COM-порта")
 	} else {
 		com.err = nil
+		config.ComPortName = com.portName
+		writeFyneAPP(config)
 	}
 	return com.err
 }

@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	fyne.io/fyne/v2 v2.2.0
+	github.com/BurntSushi/toml v1.2.1
 	go.bug.st/serial v1.3.5
 )
 
